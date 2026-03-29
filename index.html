@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>司機薪資結算系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#111318;--paper:#f6f4ef;--paper2:#edeae2;--rule:#d8d3c8;
+  --red:#c0392b;--green:#1e8449;--blue:#1a5276;--yellow:#d4ac0d;
+  --muted:#717d7e;--light:#aab7b8;--shadow:rgba(0,0,0,.07);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:'Noto Sans TC',sans-serif;min-height:100vh}
+
+header{background:var(--ink);color:#fff;padding:15px 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid var(--red);position:sticky;top:0;z-index:200}
+.logo{display:flex;align-items:center;gap:11px}
+.logo-box{width:36px;height:36px;background:var(--red);display:grid;place-items:center;font-size:16px;clip-path:polygon(0 0,100% 0,100% 72%,72% 100%,0 100%)}
+.logo h1{font-size:15px;font-weight:700}
+.logo p{font-size:10px;color:#777;margin-top:1px}
+.month-pick{display:flex;align-items:center;gap:7px}
+.month-pick label{font-size:11px;color:#777}
+.month-pick input{background:#1c1f2a;border:1px solid #333;color:#fff;font-size:12px;border-radius:4px;padding:5px 9px;outline:none;font-family:'Noto Sans TC',sans-serif}
+
+.main{max-width:1180px;margin:0 auto;padding:22px 18px 80px}
+.steps{display:flex;margin-bottom:22px}
+.step{flex:1;padding:10px 13px;background:var(--paper2);border:1px solid var(--rule);border-right:none;display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);transition:all .2s}
+.step:first-child{border-radius:4px 0 0 4px}.step:last-child{border-right:1px solid var(--rule);border-radius:0 4px 4px 0}
+.step.active{background:var(--ink);color:#fff;border-color:var(--ink)}.step.done{background:var(--green);color:#fff;border-color:var(--green)}
+.sn{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;font-size:10px;font-weight:700;font-family:'IBM Plex Mono',monospace;flex-shrink:0}
+.step.active .sn{background:var(--red)}
+.panel{display:none}.panel.active{display:block}
+
+/* UPLOAD */
+.upload-zone{border:2px dashed var(--rule);border-radius:8px;padding:50px 36px;text-align:center;cursor:pointer;background:var(--paper2);transition:all .2s;position:relative}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--red);background:#fdf5f4}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-zone h2{font-size:16px;font-weight:700;margin:10px 0 5px}
+.upload-zone p{font-size:12px;color:var(--muted)}
+.ftags{display:flex;gap:5px;justify-content:center;margin-top:10px}
+.ftag{background:var(--ink);color:#fff;font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 7px;border-radius:3px}
+.flist{margin-top:13px;display:flex;flex-direction:column;gap:6px}
+.fitem{background:#fff;border:1px solid var(--rule);border-radius:5px;padding:9px 14px;display:flex;align-items:center;gap:9px}
+.fname{font-size:12px;font-weight:600;flex:1}.fmeta{font-size:10px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
+.fdel{background:none;border:none;color:var(--light);cursor:pointer;font-size:15px}.fdel:hover{color:var(--red)}
+.err-box{background:#fdf5f4;border:1px solid #f5b7b1;border-radius:5px;padding:9px 13px;font-size:12px;color:var(--red);margin-top:9px}
+
+/* CARD */
+.card{background:#fff;border:1px solid var(--rule);border-radius:7px;overflow:hidden;margin-bottom:16px}
+.card-hd{background:var(--ink);color:#fff;padding:11px 16px;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.card-hd small{font-size:10px;color:#888;font-weight:400}
+
+/* DRIVER BLOCK */
+.driver-block{background:#fff;border:1px solid var(--rule);border-radius:7px;margin-bottom:14px;overflow:hidden}
+.driver-hd{background:var(--ink);color:#fff;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.driver-hd-left{display:flex;align-items:center;gap:10px}
+.driver-name-input{background:transparent;border:none;color:#fff;font-size:14px;font-weight:700;outline:none;width:110px;font-family:'Noto Sans TC',sans-serif}
+.driver-hd-right{display:flex;align-items:center;gap:14px}
+.rate-wrap{display:flex;align-items:center;gap:5px}
+.rate-wrap span{font-size:10px;color:#aaa}
+.rate-wrap input{width:52px;background:#1c1f2a;border:1px solid #444;color:#fff;border-radius:3px;padding:3px 6px;font-size:12px;outline:none;font-family:'IBM Plex Mono',monospace}
+.grand-total{font-size:13px;font-family:'IBM Plex Mono',monospace;color:#f1c40f;font-weight:700}
+.driver-body{padding:14px 16px}
+
+/* PER-DRIVER FEE CHIPS */
+.fee-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;align-items:center}
+.fee-row-label{font-size:10px;color:var(--muted);font-weight:700;margin-right:4px}
+.chip{display:flex;align-items:center;gap:4px;background:var(--paper2);border:1px solid var(--rule);border-radius:16px;padding:3px 10px;cursor:pointer;font-size:11px;user-select:none;transition:all .15s}
+.chip input{display:none}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip.on .cdot{background:#4ade80}
+.cdot{width:6px;height:6px;border-radius:50%;background:var(--light);flex-shrink:0}
+
+/* SOURCE TABLE */
+.src-block{margin-bottom:10px}
+.src-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.src-badge{font-size:9px;font-family:'IBM Plex Mono',monospace;padding:2px 6px;border-radius:3px;background:var(--paper2);border:1px solid var(--rule);color:var(--muted)}
+.src-sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--green);font-weight:600}
+.toggle-trips{font-size:10px;color:var(--blue);background:none;border:none;cursor:pointer;padding:2px 0;display:flex;align-items:center;gap:3px;font-family:'Noto Sans TC',sans-serif;margin-bottom:5px}
+.trip-wrap{display:none;overflow-x:auto;border:1px solid var(--rule);border-radius:4px;max-height:280px;overflow-y:auto}
+.trip-wrap.open{display:block}
+.trtable{width:100%;border-collapse:collapse;font-size:11px;min-width:780px}
+.trtable th{background:#1a1d27;color:#fff;padding:6px 9px;text-align:left;font-size:9px;font-weight:600;position:sticky;top:0;z-index:2}
+.trtable td{padding:5px 9px;border-bottom:1px solid #f0ede7;vertical-align:middle}
+.trtable tr:hover td{background:#fafaf8}
+.trtable .src-sep td{background:#f0ede7;font-size:9px;font-weight:700;color:#777;padding:3px 9px;letter-spacing:.4px}
+.trtable input[type=number]{border:1px solid var(--rule);border-radius:3px;padding:3px 5px;font-size:11px;width:78px;font-family:'IBM Plex Mono',monospace;background:var(--paper);outline:none}
+.trtable input:focus{border-color:var(--red)}
+.amount-cell{font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--green)}
+.fee-detail{font-size:10px;color:#888;line-height:1.6}
+.fee-detail .off{color:#ccc;text-decoration:line-through}
+
+/* ADJ */
+.adj-section{margin-top:10px;padding-top:10px;border-top:1px solid var(--paper2)}
+.adj-label{font-size:10px;color:var(--muted);font-weight:700;margin-bottom:6px}
+.adj-row{display:flex;gap:5px;align-items:center;margin-bottom:4px}
+.adj-row input[type=text]{border:1px solid var(--rule);border-radius:3px;padding:4px 7px;font-size:11px;width:120px;font-family:'Noto Sans TC',sans-serif;background:var(--paper);outline:none}
+.adj-row input[type=number]{border:1px solid var(--rule);border-radius:3px;padding:4px 7px;font-size:11px;width:80px;font-family:'IBM Plex Mono',monospace;background:var(--paper);outline:none}
+.adj-row select{border:1px solid var(--rule);border-radius:3px;padding:4px 6px;font-size:11px;width:64px;font-family:'Noto Sans TC',sans-serif;background:var(--paper);outline:none}
+.adj-row button{background:none;border:none;color:var(--light);cursor:pointer;font-size:13px}.adj-row button:hover{color:var(--red)}
+.add-adj{font-size:10px;color:var(--blue);background:none;border:1px dashed var(--rule);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:'Noto Sans TC',sans-serif}
+.add-adj:hover{border-color:var(--blue)}
+.adj-row input:focus,.adj-row select:focus{border-color:var(--red)}
+
+/* BTNS */
+.btn-row{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+.btn{padding:9px 20px;border-radius:4px;border:none;font-size:12px;font-family:'Noto Sans TC',sans-serif;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px}
+.btn-red{background:var(--red);color:#fff}.btn-red:hover{background:#a93226}
+.btn-outline{background:#fff;color:var(--ink);border:1px solid var(--rule)}.btn-outline:hover{border-color:var(--ink)}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover{background:#166039}
+.btn-blue{background:var(--blue);color:#fff}.btn-blue:hover{background:#154360}
+.btn-orange{background:#e67e22;color:#fff}.btn-orange:hover{background:#ca6f1e}
+.btn-sm{padding:5px 12px;font-size:11px}
+
+/* RESULT */
+.sum-bar{background:var(--ink);color:#fff;border-radius:7px;padding:15px 22px;margin-bottom:18px;display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.si{display:flex;flex-direction:column;gap:1px}
+.si-label{font-size:9px;color:#777;letter-spacing:.4px}
+.si-val{font-size:18px;font-weight:700;font-family:'IBM Plex Mono',monospace}
+.si-val.yl{color:#f1c40f}
+.vd{width:1px;background:#2d3140;height:32px}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
+.pcard{background:#fff;border:1px solid var(--rule);border-radius:7px;overflow:hidden;box-shadow:0 2px 10px var(--shadow)}
+.pc-hd{background:var(--ink);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:flex-start}
+.pc-name{font-size:15px;font-weight:700}.pc-meta{font-size:9px;color:#888;margin-top:1px}
+.pc-body{padding:12px 14px}
+.sec-title{font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.7px;text-transform:uppercase;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid var(--paper2)}
+.prow{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px}
+.plabel{color:var(--muted)}.pval{font-family:'IBM Plex Mono',monospace;font-weight:500}
+.pc-total{background:var(--ink);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+.pc-total-label{font-size:11px;color:#aaa}
+.pc-amount{font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#f1c40f}
+.pc-actions{padding:9px 13px;border-top:1px solid var(--paper2);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.detail-wrap{display:none;margin-top:6px;overflow-x:auto;max-height:220px;overflow-y:auto;border:1px solid var(--rule);border-radius:4px}
+.detail-wrap.open{display:block}
+.dtt{width:100%;border-collapse:collapse;font-size:10px;min-width:520px}
+.dtt th{background:var(--paper2);padding:5px 7px;text-align:left;color:var(--muted);font-weight:700;position:sticky;top:0}
+.dtt td{padding:5px 7px;border-bottom:1px solid #f0ede7}
+.dtt .sh td{background:#e8e4da;font-size:9px;font-weight:700;color:#777;letter-spacing:.4px}
+
+/* PDF TEMPLATE */
+#pdfTpl{position:fixed;left:-9999px;top:0;width:794px;background:#fff;font-family:'Noto Sans TC',sans-serif;color:#111;padding:42px 48px;font-size:12px}
+
+.mono{font-family:'IBM Plex Mono',monospace}
+.green{color:var(--green)}.red{color:var(--red)}.blue{color:var(--blue)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="logo-box">🚛</div>
+    <div><h1>司機薪資結算系統</h1><p>Driver Payroll v5</p></div>
+  </div>
+  <div class="month-pick"><label>結算月份</label><input type="month" id="payMonth"></div>
+</header>
+
+<div class="main">
+  <div class="steps">
+    <div class="step active" id="step1"><div class="sn">1</div>上傳 Excel</div>
+    <div class="step" id="step2"><div class="sn">2</div>個別設定費用與金額</div>
+    <div class="step" id="step3"><div class="sn">3</div>下載薪資單</div>
+  </div>
+
+  <!-- P1 UPLOAD -->
+  <div class="panel active" id="panel1">
+    <div class="upload-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls" multiple>
+      <div style="font-size:40px">📂</div>
+      <h2>拖曳或點擊上傳對帳 Excel</h2>
+      <p>支援一次多份，每位司機一份或多人同一份皆可</p>
+      <div class="ftags"><span class="ftag">.xlsx</span><span class="ftag">.xls</span></div>
+    </div>
+    <div class="flist" id="flist"></div>
+    <div id="uerr"></div>
+    <div class="btn-row"><button class="btn btn-red" id="nextBtn1" style="display:none" onclick="processFiles()">解析資料 →</button></div>
+  </div>
+
+  <!-- P2 CONFIG -->
+  <div class="panel" id="panel2">
+    <div id="driverArea"></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="goStep(1)">← 重新上傳</button>
+      <button class="btn btn-red" onclick="calcAndRender()">計算薪資 →</button>
+    </div>
+  </div>
+
+  <!-- P3 RESULTS -->
+  <div class="panel" id="panel3">
+    <div class="sum-bar" id="sumBar"></div>
+    <div class="btn-row" style="margin-bottom:16px;margin-top:0">
+      <button class="btn btn-outline" onclick="goStep(2)">← 修改</button>
+      <button class="btn btn-green" onclick="dlAllPDF()">⬇ 全部下載 PDF</button>
+      <button class="btn btn-orange" onclick="dlAllExcel()">📊 全部下載 Excel</button>
+    </div>
+    <div class="rgrid" id="rgrid"></div>
+  </div>
+</div>
+<div id="pdfTpl"></div>
+
+<script>
+const {jsPDF}=window.jspdf;
+let files=[],driverData={},payrollResult=[];
+const ALL_FEES=['基本費','夜間費','假日費','舉牌費','加點費','空趟費','待時費','偏遠費','座椅費','跨區費','車型費'];
+
+// init month
+const now=new Date();
+document.getElementById('payMonth').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+// ── NAV ──
+function goStep(n){
+  [1,2,3].forEach(i=>{
+    document.getElementById(`step${i}`).className='step'+(i<n?' done':i===n?' active':'');
+    document.getElementById(`panel${i}`).className='panel'+(i===n?' active':'');
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── UPLOAD ──
+const dz=document.getElementById('dropZone'),fi=document.getElementById('fileInput');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');addFiles([...e.dataTransfer.files])});
+fi.addEventListener('change',()=>{addFiles([...fi.files]);fi.value=''});
+function addFiles(fs){fs.forEach(f=>{if(!files.find(u=>u.name===f.name))files.push(f)});renderFlist()}
+function removeFile(name){files=files.filter(f=>f.name!==name);renderFlist()}
+function renderFlist(){
+  document.getElementById('flist').innerHTML=files.map(f=>`
+    <div class="fitem"><span style="font-size:16px">📊</span>
+    <span class="fname">${f.name}</span>
+    <span class="fmeta">${(f.size/1024).toFixed(1)} KB</span>
+    <button class="fdel" onclick="removeFile('${f.name}')">✕</button></div>`).join('');
+  document.getElementById('nextBtn1').style.display=files.length?'flex':'none';
+}
+
+// ── PARSE ──
+async function processFiles(){
+  document.getElementById('uerr').innerHTML='';
+  driverData={};
+  for(const f of files){
+    try{await parseFile(f)}
+    catch(e){document.getElementById('uerr').innerHTML+=`<div class="err-box">⚠️ ${f.name}：${e.message}</div>`;}
+  }
+  if(!Object.keys(driverData).length){
+    document.getElementById('uerr').innerHTML='<div class="err-box">⚠️ 找不到有效資料。</div>';return;
+  }
+  renderDriverArea();goStep(2);
+}
+
+function parseFile(f){
+  return new Promise((res,rej)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
+        const src=detectSrc(f.name),nameFromFile=extractName(f.name);
+        let hRow=-1;
+        for(let i=0;i<Math.min(6,rows.length);i++){
+          if(rows[i]&&rows[i].some(c=>c&&String(c).includes('司機姓名'))){hRow=i;break}
+        }
+        if(hRow>=0)parseStructured(rows,hRow,src,nameFromFile);
+        else parseSimple(rows,src,nameFromFile);
+        res();
+      }catch(err){rej(err)}
+    };
+    reader.onerror=()=>rej(new Error('讀取失敗'));
+    reader.readAsArrayBuffer(f);
+  });
+}
+function detectSrc(fn){
+  if(/百世/i.test(fn))return'百世';if(/格上/i.test(fn))return'格上';
+  if(/全球通/i.test(fn))return'全球通';if(/台灣大/i.test(fn))return'台灣大車隊';
+  return fn.replace(/\.[^.]+$/,'').slice(0,8);
+}
+function extractName(fn){
+  const m=fn.match(/[_\-－]([^\s_\-－\.]{2,4})(?:\.|$)/);
+  if(m)return m[1];
+  const m2=fn.match(/[\u4e00-\u9fff]{2,4}/g);
+  return m2?m2[m2.length-1]:null;
+}
+function ensureDriver(n){
+  if(!driverData[n])driverData[n]={rate:90,sources:[],adjs:[],feeEnabled:{}};
+  // default all enabled
+  ALL_FEES.forEach(k=>{if(driverData[n].feeEnabled[k]===undefined)driverData[n].feeEnabled[k]=true});
+}
+function ensureSrc(n,l){if(!driverData[n].sources.find(s=>s.label===l))driverData[n].sources.push({label:l,trips:[]})}
+
+function parseStructured(rows,hRow,srcLabel,nameFromFile){
+  const headers=rows[hRow].map(c=>c?String(c).trim():'');
+  const ci=name=>headers.findIndex(h=>h===name||h.includes(name));
+  const cols={
+    driver:ci('司機姓名'),order:ci('預約單號'),type:ci('服務類型'),
+    time:ci('預約時間'),member:ci('會員姓名'),car:ci('車型'),
+    airport:ci('機場'),city:ci('縣市'),dist:ci('鄉鎮市區'),
+    plate:ci('接送車號'),total:ci('合計')
+  };
+  const feeCols={};
+  ALL_FEES.forEach(k=>{const c=ci(k);if(c>=0)feeCols[k]=c});
+
+  for(let i=hRow+1;i<rows.length;i++){
+    const r=rows[i];if(!r)continue;
+    let dname=(cols.driver>=0&&r[cols.driver])?String(r[cols.driver]).trim():nameFromFile;
+    if(!dname?.trim())continue;
+    const rawTotal=parseFloat(r[cols.total]);
+    if(isNaN(rawTotal)||rawTotal===0)continue;
+
+    const fees={};
+    Object.entries(feeCols).forEach(([k,c])=>{const v=parseFloat(r[c])||0;if(v!==0)fees[k]=v});
+
+    ensureDriver(dname);ensureSrc(dname,srcLabel);
+    driverData[dname].sources.find(s=>s.label===srcLabel).trips.push({
+      orderId: cols.order>=0&&r[cols.order]?String(r[cols.order]).trim():'',
+      time: cols.time>=0&&r[cols.time]?fmtDT(r[cols.time]):'',
+      member: cols.member>=0&&r[cols.member]?String(r[cols.member]).trim():'',
+      type: cols.type>=0&&r[cols.type]?String(r[cols.type]).trim():'',
+      car: cols.car>=0&&r[cols.car]?String(r[cols.car]).trim():'',
+      airport: cols.airport>=0&&r[cols.airport]?String(r[cols.airport]).trim():'',
+      city: (cols.city>=0&&r[cols.city]?String(r[cols.city]).trim():'')+(cols.dist>=0&&r[cols.dist]?' '+String(r[cols.dist]).trim():''),
+      plate: cols.plate>=0&&r[cols.plate]?String(r[cols.plate]).trim():'',
+      fees, rawTotal, overrideTotal:null
+    });
+  }
+}
+function parseSimple(rows,srcLabel,nameFromFile){
+  if(!nameFromFile)return;
+  ensureDriver(nameFromFile);ensureSrc(nameFromFile,srcLabel);
+  const src=driverData[nameFromFile].sources.find(s=>s.label===srcLabel);
+  for(const r of rows){
+    if(!r)continue;
+    const dateVal=flexDate(r[0]);
+    const amt=parseFloat(r[2])||parseFloat(r[1]);
+    if(dateVal&&!isNaN(amt)&&amt>0)
+      src.trips.push({orderId:'',time:dateVal,member:'',type:'',car:'',airport:'',city:'',plate:'',fees:{'金額':amt},rawTotal:amt,overrideTotal:null});
+  }
+  if(!src.trips.length){
+    driverData[nameFromFile].sources=driverData[nameFromFile].sources.filter(s=>s.label!==srcLabel);
+    if(!driverData[nameFromFile].sources.length)delete driverData[nameFromFile];
+  }
+}
+function fmtDT(v){if(!v)return'';const s=String(v);const m=s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})\s*(\d{2}:\d{2})?/);return m?`${m[2]}/${m[3]}${m[4]?' '+m[4]:''}`:s.slice(0,16)}
+function flexDate(v){if(!v)return null;if(v instanceof Date)return`${v.getMonth()+1}/${v.getDate()}`;return fmtDT(String(v))||null}
+
+// ── TRIP TOTAL (per driver fee settings + override) ──
+function tripTotal(t,fe){
+  if(t.overrideTotal!==null)return t.overrideTotal;
+  if(!Object.keys(t.fees).length)return t.rawTotal;
+  let s=0;
+  Object.entries(t.fees).forEach(([k,v])=>{if(fe[k]!==false)s+=v});
+  return s||t.rawTotal;
+}
+function driverGrandTotal(d){
+  return d.sources.reduce((s,src)=>s+src.trips.reduce((ss,t)=>ss+tripTotal(t,d.feeEnabled),0),0);
+}
+function srcSubtotal(src,fe){return src.trips.reduce((s,t)=>s+tripTotal(t,fe),0)}
+
+// ── RENDER DRIVER CONFIG ──
+function sid(n){return n.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g,'_')}
+
+function renderDriverArea(){
+  const area=document.getElementById('driverArea');
+  area.innerHTML='';
+  Object.entries(driverData).forEach(([name,d])=>{
+    const feeKeys=[...new Set(d.sources.flatMap(s=>s.trips.flatMap(t=>Object.keys(t.fees))))].filter(k=>ALL_FEES.includes(k));
+    const gt=driverGrandTotal(d);
+    const div=document.createElement('div');
+    div.className='driver-block';
+    div.id=`db_${sid(name)}`;
+
+    // fee chips HTML
+    const chips=feeKeys.map(k=>`
+      <label class="chip${d.feeEnabled[k]?' on':''}" id="chip_${sid(name)}_${sid(k)}">
+        <input type="checkbox" ${d.feeEnabled[k]?'checked':''} onchange="toggleDriverFee('${name}','${k}',this.checked)">
+        <span class="cdot"></span>${k}
+      </label>`).join('');
+
+    div.innerHTML=`
+      <div class="driver-hd">
+        <div class="driver-hd-left">
+          <input class="driver-name-input" type="text" value="${name}" onchange="renameDriver('${name}',this.value)">
+          <span style="font-size:10px;color:#777">${d.sources.reduce((s,src)=>s+src.trips.length,0)} 趟</span>
+        </div>
+        <div class="driver-hd-right">
+          <div class="rate-wrap">
+            <span>抽成</span>
+            <input type="number" min="1" max="100" value="${d.rate}" onchange="driverData['${name}'].rate=parseFloat(this.value)||90">
+            <span>%</span>
+          </div>
+          <div class="grand-total" id="gt_${sid(name)}">$${gt.toLocaleString()}</div>
+        </div>
+      </div>
+      <div class="driver-body">
+        ${feeKeys.length?`<div class="fee-row"><span class="fee-row-label">此司機計入費用：</span>${chips}</div>`:''}
+        <div id="srcs_${sid(name)}">${renderSrcTables(name,d,feeKeys)}</div>
+        <div class="adj-section">
+          <div class="adj-label">加減項（懲處 / 借支 / 補貼）</div>
+          <div id="adj_${sid(name)}"></div>
+          <button class="add-adj" onclick="addAdj('${name}')">＋ 加減項</button>
+        </div>
+      </div>`;
+    area.appendChild(div);
+    renderAdjRows(name);
+  });
+}
+
+function renderSrcTables(name,d,feeKeys){
+  return d.sources.map(src=>{
+    const sub=srcSubtotal(src,d.feeEnabled);
+    const rows=src.trips.map((t,ti)=>{
+      const feeHTML=Object.entries(t.fees||{}).filter(([,v])=>v!==0).map(([k,v])=>`<span class="${d.feeEnabled[k]===false?'off':''}">${k} $${v}</span>`).join(' ');
+      return`<tr>
+        <td class="mono" style="color:#bbb;font-size:10px">${String(ti+1).padStart(2,'0')}</td>
+        <td class="mono blue" style="font-size:10px">${t.orderId||'—'}</td>
+        <td style="font-size:10px">${t.time||'—'}</td>
+        <td style="font-size:10px">${t.member||'—'}</td>
+        <td style="font-size:10px">${t.type||'—'}</td>
+        <td style="font-size:10px;color:#666">${t.city?t.city+' →':''} ${t.airport||''}</td>
+        <td><div class="fee-detail">${feeHTML}</div></td>
+        <td><input type="number" value="${tripTotal(t,d.feeEnabled)}" id="ta_${sid(name)}_${sid(src.label)}_${ti}"
+          onchange="overrideTrip('${name}','${src.label}',${ti},this.value)" title="可直接修改此趟金額"></td>
+      </tr>`;
+    }).join('');
+    return`<div class="src-block">
+      <div class="src-hd">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span class="src-badge">${src.label}</span>
+          <span style="font-size:11px;color:var(--muted)">${src.trips.length} 趟</span>
+        </div>
+        <span class="src-sub" id="sub_${sid(name)}_${sid(src.label)}">$${sub.toLocaleString()}</span>
+      </div>
+      <button class="toggle-trips" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=(this.nextElementSibling.classList.contains('open')?'▼':'▶')+' 趟次明細 / 修改金額'">
+        ▶ 趟次明細 / 修改金額
+      </button>
+      <div class="trip-wrap">
+        <table class="trtable">
+          <thead><tr><th>#</th><th>訂單編號</th><th>時間</th><th>乘客</th><th>服務類型</th><th>路線</th><th>費用明細</th><th>金額（可改）</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// toggle per-driver fee
+function toggleDriverFee(name,k,val){
+  const d=driverData[name];if(!d)return;
+  d.feeEnabled[k]=val;
+  // update chip style
+  const chip=document.getElementById(`chip_${sid(name)}_${sid(k)}`);
+  if(chip)chip.className='chip'+(val?' on':'');
+  // recalc overrides that are null (auto-calc trips)
+  d.sources.forEach(src=>src.trips.forEach((t,ti)=>{
+    if(t.overrideTotal===null){
+      const el=document.getElementById(`ta_${sid(name)}_${sid(src.label)}_${ti}`);
+      if(el)el.value=tripTotal(t,d.feeEnabled);
+    }
+  }));
+  refreshTotals(name);
+  // re-render fee detail spans
+  const feeKeys=[...new Set(d.sources.flatMap(s=>s.trips.flatMap(t=>Object.keys(t.fees))))].filter(fk=>ALL_FEES.includes(fk));
+  document.getElementById(`srcs_${sid(name)}`).innerHTML=renderSrcTables(name,d,feeKeys);
+  refreshTotals(name);
+}
+
+function overrideTrip(name,srcLabel,ti,val){
+  const d=driverData[name];if(!d)return;
+  const src=d.sources.find(s=>s.label===srcLabel);if(!src)return;
+  const v=parseFloat(val);
+  src.trips[ti].overrideTotal=isNaN(v)?null:v;
+  refreshTotals(name);
+}
+function refreshTotals(name){
+  const d=driverData[name];if(!d)return;
+  d.sources.forEach(src=>{
+    const sub=srcSubtotal(src,d.feeEnabled);
+    const el=document.getElementById(`sub_${sid(name)}_${sid(src.label)}`);
+    if(el)el.textContent='$'+sub.toLocaleString();
+  });
+  const gt=driverGrandTotal(d);
+  const el=document.getElementById(`gt_${sid(name)}`);
+  if(el)el.textContent='$'+gt.toLocaleString();
+}
+
+function renameDriver(old,nw){if(old===nw||!nw.trim())return;driverData[nw.trim()]=driverData[old];delete driverData[old]}
+function addAdj(name){driverData[name].adjs.push({desc:'',amount:0,type:'minus'});renderAdjRows(name)}
+function removeAdj(name,i){driverData[name].adjs.splice(i,1);renderAdjRows(name)}
+function renderAdjRows(name){
+  const el=document.getElementById(`adj_${sid(name)}`);if(!el)return;
+  el.innerHTML=driverData[name].adjs.map((a,i)=>`
+    <div class="adj-row">
+      <input type="text" placeholder="說明" value="${a.desc}" onchange="driverData['${name}'].adjs[${i}].desc=this.value">
+      <input type="number" placeholder="金額" value="${a.amount||''}" onchange="driverData['${name}'].adjs[${i}].amount=parseFloat(this.value)||0">
+      <select onchange="driverData['${name}'].adjs[${i}].type=this.value">
+        <option value="minus" ${a.type==='minus'?'selected':''}>－減</option>
+        <option value="plus" ${a.type==='plus'?'selected':''}>＋加</option>
+      </select>
+      <button onclick="removeAdj('${name}',${i})">✕</button>
+    </div>`).join('');
+}
+
+// ── CALC ──
+function calcAndRender(){
+  payrollResult=Object.entries(driverData).map(([name,d])=>{
+    const sources=d.sources.map(src=>({
+      label:src.label,count:src.trips.length,
+      subtotal:srcSubtotal(src,d.feeEnabled),
+      trips:src.trips.map(t=>({...t,finalTotal:tripTotal(t,d.feeEnabled)}))
+    }));
+    const tripsTotal=sources.reduce((s,src)=>s+src.subtotal,0);
+    const rate=(parseFloat(d.rate)||90)/100;
+    const baseNet=Math.round(tripsTotal*rate);
+    const plusAdj=d.adjs.filter(a=>a.type==='plus').reduce((s,a)=>s+(a.amount||0),0);
+    const minusAdj=d.adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+(a.amount||0),0);
+    return{name,rate:d.rate,tripsTotal,baseNet,plusAdj,minusAdj,
+           netTotal:baseNet+plusAdj-minusAdj,sources,adjs:d.adjs,
+           feeEnabled:d.feeEnabled};
+  });
+  renderResults();goStep(3);
+}
+
+// ── RESULTS ──
+function getML(){const v=document.getElementById('payMonth').value;const[yr,mo]=v.split('-');return mo?`${yr} 年 ${parseInt(mo)} 月`:v}
+
+function renderResults(){
+  const ml=getML();
+  const tot=payrollResult.reduce((s,r)=>s+r.netTotal,0);
+  const tr=payrollResult.reduce((s,r)=>s+r.sources.reduce((ss,src)=>ss+src.count,0),0);
+  document.getElementById('sumBar').innerHTML=`
+    <div class="si"><div class="si-label">月份</div><div class="si-val">${ml}</div></div>
+    <div class="vd"></div>
+    <div class="si"><div class="si-label">司機人數</div><div class="si-val">${payrollResult.length}</div></div>
+    <div class="vd"></div>
+    <div class="si"><div class="si-label">總趟數</div><div class="si-val">${tr}</div></div>
+    <div class="vd"></div>
+    <div class="si"><div class="si-label">本月薪資總支出</div><div class="si-val yl">$${tot.toLocaleString()}</div></div>`;
+
+  document.getElementById('rgrid').innerHTML=payrollResult.map((r,idx)=>{
+    const srcSum=r.sources.map(src=>`<div class="prow"><span class="plabel">${src.label}（${src.count}趟）</span><span class="pval green">$${src.subtotal.toLocaleString()}</span></div>`).join('');
+    const adjRows=r.adjs.map(a=>`<div class="prow"><span class="plabel">${a.type==='plus'?'＋':'－'} ${a.desc||'調整項'}</span><span class="pval ${a.type==='plus'?'green':'red'}">${a.type==='plus'?'+':'-'}$${(a.amount||0).toLocaleString()}</span></div>`).join('');
+    const detailRows=r.sources.map(src=>`
+      <tr class="sh"><td colspan="6">${src.label}</td></tr>
+      ${src.trips.map((t,i)=>`<tr>
+        <td class="mono" style="color:#bbb">${String(i+1).padStart(2,'0')}</td>
+        <td class="mono" style="color:var(--blue);font-size:10px">${t.orderId||'—'}</td>
+        <td>${t.time||'—'}</td><td>${t.member||'—'}</td>
+        <td>${t.type||'—'}</td>
+        <td class="mono green" style="text-align:right">$${t.finalTotal.toLocaleString()}</td>
+      </tr>`).join('')}`).join('');
+    const disabledFees=Object.entries(r.feeEnabled||{}).filter(([,v])=>!v).map(([k])=>k);
+    return`<div class="pcard">
+      <div class="pc-hd"><div><div class="pc-name">${r.name}</div><div class="pc-meta">${ml} | 抽成${r.rate}%${disabledFees.length?' | 未計入：'+disabledFees.join('、'):''}</div></div></div>
+      <div class="pc-body">
+        <div class="sec-title">來源匯總</div>${srcSum}
+        <div class="prow" style="font-weight:700;border-top:1px solid var(--paper2);margin-top:4px;padding-top:5px"><span class="plabel">趟次總額</span><span class="pval">$${r.tripsTotal.toLocaleString()}</span></div>
+        <div class="prow"><span class="plabel">× 抽成（${r.rate}%）</span><span class="pval blue">$${r.baseNet.toLocaleString()}</span></div>
+        ${adjRows}
+        <button class="toggle-trips" style="margin-top:6px" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=(this.nextElementSibling.classList.contains('open')?'▼':'▶')+' 完整趟次明細（${r.sources.reduce((s,src)=>s+src.count,0)} 趟）'">
+          ▶ 完整趟次明細（${r.sources.reduce((s,src)=>s+src.count,0)} 趟）
+        </button>
+        <div class="detail-wrap">
+          <table class="dtt"><thead><tr><th>#</th><th>訂單編號</th><th>時間</th><th>乘客</th><th>類型</th><th style="text-align:right">金額</th></tr></thead>
+          <tbody>${detailRows}</tbody></table>
+        </div>
+      </div>
+      <div class="pc-total"><div><div class="pc-total-label">稅後應付薪資</div><div style="font-size:9px;color:#666;margin-top:1px">趟次×${r.rate}%${r.plusAdj>0?' +加項':''}${r.minusAdj>0?' −減項':''}</div></div>
+      <div class="pc-amount">$${r.netTotal.toLocaleString()}</div></div>
+      <div class="pc-actions">
+        <button class="btn btn-blue btn-sm" onclick="dlPDF(${idx})">⬇ PDF</button>
+        <button class="btn btn-orange btn-sm" onclick="dlExcel(${idx})">📊 Excel</button>
+        <span style="font-size:10px;color:var(--muted)">${r.name}｜${ml}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── EXCEL EXPORT ──
+function buildExcel(r){
+  const ml=getML();
+  const mo=document.getElementById('payMonth').value||'本月';
+  const wb=XLSX.utils.book_new();
+  const disabledFees=Object.entries(r.feeEnabled||{}).filter(([,v])=>!v).map(([k])=>k);
+
+  // ── Sheet 1: 趟次明細 ──
+  const tripHeader=['#','訂單編號','預約時間','乘客姓名','服務類型','路線','車型','基本費','夜間費','假日費','舉牌費','加點費','空趟費','待時費','偏遠費','座椅費','跨區費','車型費','計入金額','備註'];
+  const tripRows=[];
+  r.sources.forEach(src=>{
+    // source separator row
+    tripRows.push([src.label]);
+    src.trips.forEach((t,i)=>{
+      const feeVals={};
+      Object.entries(t.fees||{}).forEach(([k,v])=>feeVals[k]=v);
+      const note=t.overrideTotal!==null?'*手動調整':(disabledFees.length?'未計：'+Object.keys(t.fees||{}).filter(k=>!r.feeEnabled[k]).join('/'):'');
+      tripRows.push([
+        i+1, t.orderId||'', t.time||'', t.member||'', t.type||'',
+        (t.city?t.city+'→':'')+' '+(t.airport||''), t.car||'',
+        feeVals['基本費']||0, feeVals['夜間費']||0, feeVals['假日費']||0,
+        feeVals['舉牌費']||0, feeVals['加點費']||0, feeVals['空趟費']||0,
+        feeVals['待時費']||0, feeVals['偏遠費']||0, feeVals['座椅費']||0,
+        feeVals['跨區費']||0, feeVals['車型費']||0,
+        t.finalTotal, note
+      ]);
+    });
+    // subtotal
+    tripRows.push(['','','','','','','','','','','','','','','','','','',src.subtotal,'（'+src.label+'小計）']);
+  });
+  const ws1=XLSX.utils.aoa_to_sheet([tripHeader,...tripRows]);
+  ws1['!cols']=[{wch:4},{wch:16},{wch:16},{wch:10},{wch:12},{wch:22},{wch:10},
+    {wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:10},{wch:18}];
+  XLSX.utils.book_append_sheet(wb,ws1,'趟次明細');
+
+  // ── Sheet 2: 薪資計算 ──
+  const calcData=[
+    ['司機姓名', r.name],
+    ['結算月份', ml],
+    [''],
+    ['項目','金額','說明'],
+  ];
+  r.sources.forEach(src=>calcData.push([src.label+'趟次合計', src.subtotal, src.count+'趟']));
+  calcData.push(['趟次總額', r.tripsTotal, '']);
+  calcData.push(['抽成比例', r.rate/100, '']);
+  calcData.push(['稅前薪資', r.baseNet, '趟次總額×抽成']);
+  if(r.adjs.length){
+    calcData.push(['']);
+    calcData.push(['加減項','金額','類型']);
+    r.adjs.forEach(a=>calcData.push([a.desc||'調整項', a.type==='plus'?a.amount:-a.amount, a.type==='plus'?'加項':'減項']));
+  }
+  calcData.push(['']);
+  calcData.push(['稅後應付薪資', r.netTotal, '最終應付']);
+  if(disabledFees.length)calcData.push(['','','⚠️ 未計入費用：'+disabledFees.join('、')]);
+
+  const ws2=XLSX.utils.aoa_to_sheet(calcData);
+  ws2['!cols']=[{wch:18},{wch:14},{wch:28}];
+  XLSX.utils.book_append_sheet(wb,ws2,'薪資計算');
+
+  // ── Sheet 3: 老闆審核（空白欄供填寫）──
+  const reviewData=[
+    ['司機薪資審核表','','','',''],
+    ['司機：'+r.name,'','月份：'+ml,'',''],
+    [''],
+    ['項目','系統計算金額','老闆調整金額','差異','備註'],
+    ['趟次總額', r.tripsTotal,'','',''],
+    ['稅前薪資（×'+r.rate+'%）', r.baseNet,'','',''],
+  ];
+  r.adjs.forEach(a=>reviewData.push([a.desc||'調整項', a.type==='plus'?a.amount:-a.amount,'','','']));
+  reviewData.push(['稅後應付薪資', r.netTotal,'','','']);
+  reviewData.push(['']);
+  reviewData.push(['附加說明／額外項目','','金額','','']);
+  for(let i=0;i<5;i++)reviewData.push(['','','','','']);
+  reviewData.push(['']);
+  reviewData.push(['最終應付薪資','','','','']);
+  reviewData.push(['主管簽名：','','日期：','','']);
+
+  const ws3=XLSX.utils.aoa_to_sheet(reviewData);
+  ws3['!cols']=[{wch:20},{wch:14},{wch:14},{wch:10},{wch:24}];
+  XLSX.utils.book_append_sheet(wb,ws3,'老闆審核');
+
+  return wb;
+}
+
+function dlExcel(idx){
+  const r=payrollResult[idx];
+  const mo=document.getElementById('payMonth').value||'本月';
+  const wb=buildExcel(r);
+  XLSX.writeFile(wb,`薪資單_${r.name}_${mo}.xlsx`);
+}
+function dlAllExcel(){
+  payrollResult.forEach((_,i)=>dlExcel(i));
+}
+
+// ── PDF ──
+function buildPDFHTML(r){
+  const ml=getML();
+  const disabledFees=Object.entries(r.feeEnabled||{}).filter(([,v])=>!v).map(([k])=>k);
+  const tripRows=r.sources.map(src=>`
+    <tr><td colspan="6" style="background:#f0ede8;font-size:9px;font-weight:700;color:#888;padding:4px 9px;letter-spacing:.4px">${src.label}</td></tr>
+    ${src.trips.map((t,i)=>`<tr style="background:${i%2===0?'#fff':'#fafaf8'}">
+      <td style="font-family:'IBM Plex Mono',monospace;color:#bbb;padding:5px 9px;font-size:10px">${String(i+1).padStart(2,'0')}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;color:#1a5276;padding:5px 9px;font-size:10px">${t.orderId||'—'}</td>
+      <td style="padding:5px 9px;font-size:10px">${t.time||'—'}</td>
+      <td style="padding:5px 9px;font-size:10px">${t.member||'—'}</td>
+      <td style="padding:5px 9px;font-size:10px">${t.type||'—'} ${t.city?'| '+t.city:''}${t.airport?' → '+t.airport:''}</td>
+      <td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:#1e8449;font-weight:600;padding:5px 9px">${t.overrideTotal!==null?'*':''}$${t.finalTotal.toLocaleString()}</td>
+    </tr>`).join('')}
+    <tr><td colspan="5" style="text-align:right;font-size:10px;color:#888;padding:5px 9px;border-top:1px solid #e0ddd6">小計</td>
+        <td style="text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;padding:5px 9px;border-top:1px solid #e0ddd6">$${src.subtotal.toLocaleString()}</td></tr>`).join('');
+
+  const adjRows=r.adjs.map(a=>`<tr><td colspan="2" style="padding:7px 12px;color:#555">${a.type==='plus'?'＋':'－'} ${a.desc||'調整項'}</td>
+    <td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:${a.type==='plus'?'#1e8449':'#c0392b'};padding:7px 12px">${a.type==='plus'?'+':'-'}$${(a.amount||0).toLocaleString()}</td></tr>`).join('');
+
+  return`<div style="font-family:'Noto Sans TC',sans-serif;color:#111;padding:42px 48px;width:794px;background:#fff">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px;padding-bottom:12px;border-bottom:3px solid #111">
+    <div><div style="font-size:20px;font-weight:900;letter-spacing:1px">司機薪資單</div><div style="font-size:10px;color:#888;margin-top:2px">Driver Payslip</div></div>
+    <div style="text-align:right"><div style="font-size:16px;font-weight:700;color:#c0392b">${ml}</div><div style="font-size:10px;color:#aaa;margin-top:1px">列印：${new Date().toLocaleDateString('zh-TW')}</div></div>
+  </div>
+  <div style="display:flex;border:1px solid #e0ddd6;border-radius:5px;overflow:hidden;margin-bottom:16px">
+    ${[['司機姓名',r.name],['月份',ml],['總趟數',r.sources.reduce((s,src)=>s+src.count,0)+'趟'],['抽成',r.rate+'%']].map(([l,v])=>`
+      <div style="flex:1;padding:8px 13px;border-right:1px solid #e0ddd6"><div style="font-size:9px;color:#888;font-weight:700;letter-spacing:.4px;margin-bottom:3px">${l}</div><div style="font-size:14px;font-weight:700">${v}</div></div>`).join('')}
+  </div>
+  ${disabledFees.length?`<div style="background:#fef9e7;border:1px solid #f9e79f;border-radius:4px;padding:7px 12px;font-size:10px;color:#b7950b;margin-bottom:12px">⚠️ 以下費用未計入本薪資：${disabledFees.join('、')}</div>`:''}
+  <div style="font-size:10px;font-weight:700;color:#888;letter-spacing:.7px;margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid #e0ddd6">趟次明細</div>
+  <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px">
+    <thead><tr style="background:#111;color:#fff"><th style="padding:6px 9px;font-size:9px;text-align:left">#</th><th style="padding:6px 9px;font-size:9px;text-align:left">訂單編號</th><th style="padding:6px 9px;font-size:9px;text-align:left">時間</th><th style="padding:6px 9px;font-size:9px;text-align:left">乘客</th><th style="padding:6px 9px;font-size:9px;text-align:left">服務 / 路線</th><th style="padding:6px 9px;font-size:9px;text-align:right">金額</th></tr></thead>
+    <tbody>${tripRows}</tbody>
+  </table>
+  <div style="font-size:10px;font-weight:700;color:#888;letter-spacing:.7px;margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid #e0ddd6">薪資計算</div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <tr><td style="padding:7px 12px;color:#555">趟次總額</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:600;padding:7px 12px;border-bottom:1px solid #f0ede8">$${r.tripsTotal.toLocaleString()}</td></tr>
+    <tr><td style="padding:7px 12px;color:#555">× 抽成比例 (${r.rate}%)</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:#1a5276;padding:7px 12px;border-bottom:1px solid #f0ede8">$${r.baseNet.toLocaleString()}</td></tr>
+    ${adjRows}
+    <tr style="background:#111;color:#fff"><td style="padding:11px 15px;font-size:14px;font-weight:700">稅後應付薪資</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:900;color:#f1c40f;padding:11px 15px">$${r.netTotal.toLocaleString()}</td></tr>
+  </table>
+  <div style="display:flex;gap:36px;margin-top:28px;padding-top:10px;border-top:1px solid #e0ddd6">
+    <div style="flex:1;border-top:1px solid #555;padding-top:5px;font-size:10px;color:#888;text-align:center">主管簽名</div>
+    <div style="flex:1;border-top:1px solid #555;padding-top:5px;font-size:10px;color:#888;text-align:center">司機簽收</div>
+    <div style="flex:1;border-top:1px solid #555;padding-top:5px;font-size:10px;color:#888;text-align:center">日期</div>
+  </div>
+  <div style="margin-top:14px;font-size:9px;color:#bbb;text-align:center">* 標示為手動調整金額　｜　系統自動產生，如有疑問請洽管理人員</div>
+</div>`;
+}
+
+async function dlPDF(idx){
+  const r=payrollResult[idx];
+  const tpl=document.getElementById('pdfTpl');
+  tpl.innerHTML=buildPDFHTML(r);
+  await document.fonts.ready;
+  await new Promise(r=>setTimeout(r,350));
+  const canvas=await html2canvas(tpl,{scale:2,useCORS:true,backgroundColor:'#ffffff',width:794});
+  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
+  const ratio=canvas.height/canvas.width,imgH=pw*ratio;
+  if(imgH<=ph){pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,pw,imgH);}
+  else{
+    const pageH=ph/pw*canvas.width;let y=0;
+    while(y<canvas.height){
+      const sliceH=Math.min(pageH,canvas.height-y);
+      const sc=document.createElement('canvas');sc.width=canvas.width;sc.height=sliceH;
+      sc.getContext('2d').drawImage(canvas,0,-y);
+      if(y>0)pdf.addPage();
+      pdf.addImage(sc.toDataURL('image/png'),'PNG',0,0,pw,sliceH*(pw/canvas.width));
+      y+=sliceH;
+    }
+  }
+  const mo=document.getElementById('payMonth').value||'本月';
+  pdf.save(`薪資單_${r.name}_${mo}.pdf`);
+  tpl.innerHTML='';
+}
+async function dlAllPDF(){for(let i=0;i<payrollResult.length;i++){await dlPDF(i);await new Promise(r=>setTimeout(r,400));}}
+</script>
+</body>
+</html>
