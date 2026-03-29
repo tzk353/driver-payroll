@@ -198,10 +198,35 @@ header{background:var(--ink);color:#fff;padding:15px 28px;display:flex;align-ite
   <!-- P3 -->
   <div class="panel" id="panel3">
     <div class="sum-bar" id="sumBar"></div>
-    <div class="btn-row" style="margin-bottom:16px;margin-top:0">
-      <button class="btn btn-outline" onclick="goStep(2)">← 修改</button>
-      <button class="btn btn-green" onclick="dlAllPDF()">⬇ 全部下載 PDF</button>
-      <button class="btn btn-orange" onclick="dlAllExcel()">📊 全部下載 Excel</button>
+
+    <!-- Step A: 下載 Excel 給老闆確認 -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-hd">① 下載 Excel，給老闆確認 / 修改 <small>老闆可在「薪資計算」工作表直接修改金額</small></div>
+      <div style="padding:14px 18px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-orange" onclick="dlAllExcel()">📊 全部下載 Excel</button>
+        <span style="font-size:11px;color:var(--muted)">或在下方結果卡片個別下載</span>
+      </div>
+    </div>
+
+    <!-- Step B: 上傳修改後的 Excel → 產生 PDF -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-hd">② 上傳確認後的 Excel，產生最終 PDF <small>系統會讀取老闆修改過的金額來產生薪資單</small></div>
+      <div style="padding:14px 18px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--s2);border:1px solid var(--rule);border-radius:5px;padding:9px 16px;font-size:12px;font-weight:600;transition:all .2s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--rule)'">
+            📂 選擇已修改的 Excel
+            <input type="file" accept=".xlsx" multiple style="display:none" onchange="handleExcelImport(this.files)">
+          </label>
+          <span style="font-size:11px;color:var(--muted)">可一次選多個司機的 Excel</span>
+        </div>
+        <div id="importStatus" style="margin-top:10px;font-size:12px;color:var(--muted);min-height:18px"></div>
+      </div>
+    </div>
+
+    <!-- 結果卡片 -->
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+      <span>系統計算結果（尚未經老闆確認）</span>
+      <button class="btn btn-green btn-sm" onclick="dlAllPDF()">⬇ 全部下載 PDF（系統版）</button>
     </div>
     <div class="rgrid" id="rgrid"></div>
   </div>
@@ -453,7 +478,9 @@ function renderResults(){
     <div class="si"><div class="si-label">月份</div><div class="si-val">${ml}</div></div>
     <div class="vd"></div><div class="si"><div class="si-label">司機人數</div><div class="si-val">${payrollResult.length}</div></div>
     <div class="vd"></div><div class="si"><div class="si-label">總趟數</div><div class="si-val">${tr}</div></div>
-    <div class="vd"></div><div class="si"><div class="si-label">本月薪資總支出</div><div class="si-val yl">$${tot.toLocaleString()}</div></div>`;
+    <div class="vd"></div><div class="si"><div class="si-label">本月薪資總支出</div><div class="si-val yl">$${tot.toLocaleString()}</div></div>
+    <div style="flex:1"></div>
+    <button class="btn btn-outline btn-sm" onclick="goStep(2)" style="background:rgba(255,255,255,.08);border-color:#444;color:#fff;font-size:11px">← 修改設定</button>`;
 
   document.getElementById('rgrid').innerHTML=payrollResult.map((r,idx)=>{
     const srcRows=r.sources.map(src=>`<div class="prow"><span class="plabel">${src.label}（${src.count} 趟）</span><span class="pval green">$${src.subtotal.toLocaleString()}</span></div>`).join('');
@@ -612,13 +639,25 @@ async function dlPDF(idx){
   pdf.save(`薪資單_${r.name}_${mo}.pdf`);
   tpl.innerHTML='';
 }
-async function dlAllPDF(){for(let i=0;i<payrollResult.length;i++){await dlPDF(i);await new Promise(r=>setTimeout(r,400));}}
+async function dlAllPDF(){
+  for(let i=0;i<payrollResult.length;i++){await dlPDF(i);await new Promise(r=>setTimeout(r,400));}
+}
 
 // EXCEL
 function dlExcel(idx){
   const r=payrollResult[idx];
+  buildAndSaveExcel(r);
+}
+function dlAllExcel(){payrollResult.forEach((_,i)=>dlExcel(i));}
+
+function buildAndSaveExcel(r){
   const ml=getML();
   const mo=document.getElementById('payMonth').value||'本月';
+  const wb=buildExcelWb(r,ml);
+  XLSX.writeFile(wb,`薪資單_${r.name}_${mo}.xlsx`);
+}
+
+function buildExcelWb(r,ml){
   const wb=XLSX.utils.book_new();
   const disabledFees=Object.entries(r.fe||{}).filter(([,v])=>!v).map(([k])=>k);
 
@@ -640,7 +679,7 @@ function dlExcel(idx){
   ws1['!cols']=[{wch:4},{wch:16},{wch:16},{wch:10},{wch:12},{wch:22},{wch:10},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:10},{wch:20}];
   XLSX.utils.book_append_sheet(wb,ws1,'趟次明細');
 
-  // Sheet 2: 薪資計算
+  // Sheet 2: 薪資計算（老闆可在此修改）
   const calcRows=[
     ['司機姓名',r.name],['結算月份',ml],[''],
     ['項目','金額','說明'],
@@ -651,15 +690,126 @@ function dlExcel(idx){
   calcRows.push(['稅前薪資',r.baseNet,'趟次總額×抽成']);
   if(r.adjs.length){calcRows.push(['']);r.adjs.forEach(a=>calcRows.push([a.desc||'調整項',a.type==='plus'?a.amount:-a.amount,a.type==='plus'?'加項':'減項']));}
   calcRows.push(['']);
-  calcRows.push(['本月應領薪資',r.netTotal,'最終應付']);
+  calcRows.push(['本月應領薪資',r.netTotal,'← 老闆可直接修改此數字']);
   if(disabledFees.length)calcRows.push(['','','⚠️ 未計入：'+disabledFees.join('、')]);
   const ws2=XLSX.utils.aoa_to_sheet(calcRows);
   ws2['!cols']=[{wch:18},{wch:14},{wch:28}];
   XLSX.utils.book_append_sheet(wb,ws2,'薪資計算');
-
-  XLSX.writeFile(wb,`薪資單_${r.name}_${mo}.xlsx`);
+  return wb;
 }
-function dlAllExcel(){payrollResult.forEach((_,i)=>dlExcel(i));}
+
+// ── 從 Excel 讀取修改後資料並產生 PDF ──
+function readExcelForPDF(file){
+  return new Promise((res,rej)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const wb=XLSX.read(e.target.result,{type:'array'});
+        // 讀「趟次明細」sheet
+        const ws1=wb.Sheets['趟次明細'];
+        // 讀「薪資計算」sheet
+        const ws2=wb.Sheets['薪資計算'];
+        if(!ws1||!ws2){rej(new Error('找不到「趟次明細」或「薪資計算」工作表'));return;}
+
+        const rows1=XLSX.utils.sheet_to_json(ws1,{header:1,defval:''});
+        const rows2=XLSX.utils.sheet_to_json(ws2,{header:1,defval:''});
+
+        // 從薪資計算抓基本資訊
+        const name=String(rows2[0]?.[1]||'').trim();
+        const ml=String(rows2[1]?.[1]||'').trim();
+
+        // 找「本月應領薪資」那行
+        let netTotal=0,tripsTotal=0,baseNet=0,rate=90;
+        const adjs=[];
+        let inAdj=false;
+        rows2.forEach(r=>{
+          const label=String(r[0]||'').trim();
+          const val=parseFloat(r[1]);
+          if(label==='趟次總額'&&!isNaN(val))tripsTotal=val;
+          if(label==='稅前薪資'&&!isNaN(val))baseNet=val;
+          if(label==='本月應領薪資'&&!isNaN(val))netTotal=val;
+          if(label==='抽成比例')rate=parseFloat(String(r[1]).replace('%',''))||90;
+          if(label&&label!=='項目'&&label!=='趟次總額'&&label!=='稅前薪資'&&label!=='本月應領薪資'&&label!=='抽成比例'&&label!=='司機姓名'&&label!=='結算月份'&&!isNaN(val)&&val!==0&&label.match(/^[^a-zA-Z]/)){
+            // 可能是加減項
+            if(!label.includes('趟次合計'))adjs.push({desc:label,amount:Math.abs(val),type:val>=0?'plus':'minus'});
+          }
+        });
+
+        // 從趟次明細重建 sources
+        const sourcesMap={};
+        let curSrc='';
+        let tripIdx=0;
+        rows1.slice(1).forEach(r=>{
+          const col0=String(r[0]||'').trim();
+          const col18=parseFloat(r[18]);// 計入金額欄
+          // 如果第一欄不是數字且其他欄空 → 來源標題行
+          if(col0&&isNaN(parseInt(col0))&&!r[1]&&!r[2]){
+            curSrc=col0;tripIdx=0;
+            if(!sourcesMap[curSrc])sourcesMap[curSrc]={label:curSrc,count:0,subtotal:0,trips:[]};
+          } else if(curSrc&&!isNaN(col18)&&col18>0){
+            sourcesMap[curSrc].trips.push({
+              orderId:String(r[1]||''),time:String(r[2]||''),member:String(r[3]||''),
+              type:String(r[4]||''),city:String(r[5]||''),car:String(r[6]||''),
+              fees:{},finalTotal:col18,ov:null
+            });
+            sourcesMap[curSrc].subtotal+=col18;
+            sourcesMap[curSrc].count++;
+            tripIdx++;
+          }
+        });
+        const sources=Object.values(sourcesMap);
+
+        res({name,ml,rate,tripsTotal,baseNet,netTotal,plusAdj:0,minusAdj:0,sources,adjs,fe:{}});
+      }catch(err){rej(err)}
+    };
+    reader.onerror=()=>rej(new Error('讀取失敗'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function handleExcelImport(fileList){
+  const statusEl=document.getElementById('importStatus');
+  const files=[...fileList];
+  if(!files.length)return;
+  statusEl.innerHTML='';
+  for(const f of files){
+    statusEl.innerHTML+=`<div id="imp_${f.name}">⏳ 讀取 ${f.name}…</div>`;
+  }
+  for(const f of files){
+    const el=document.getElementById(`imp_${f.name}`);
+    try{
+      const r=await readExcelForPDF(f);
+      const mo=document.getElementById('payMonth').value||'本月';
+      if(el)el.textContent=`⏳ ${r.name}：產生 PDF 中…`;
+      await dlPDFFromData(r,mo);
+      if(el)el.textContent=`✅ ${r.name} 的 PDF 已下載`;
+    }catch(e){
+      if(el)el.textContent=`⚠️ ${f.name} 失敗：${e.message}`;
+    }
+    await new Promise(x=>setTimeout(x,300));
+  }
+}
+
+async function dlPDFFromData(r,mo){
+  const tpl=document.getElementById('pdfTpl');
+  tpl.innerHTML=buildPDFHTML(r);
+  await document.fonts.ready;
+  await new Promise(x=>setTimeout(x,400));
+  const canvas=await html2canvas(tpl,{scale:2,useCORS:true,backgroundColor:'#ffffff',width:794});
+  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
+  const pageH=ph/pw*canvas.width;let y=0;
+  while(y<canvas.height){
+    const sliceH=Math.min(pageH,canvas.height-y);
+    const sc=document.createElement('canvas');sc.width=canvas.width;sc.height=sliceH;
+    sc.getContext('2d').drawImage(canvas,0,-y);
+    if(y>0)pdf.addPage();
+    pdf.addImage(sc.toDataURL('image/png'),'PNG',0,0,pw,sliceH*(pw/canvas.width));
+    y+=sliceH;
+  }
+  pdf.save(`薪資單_${r.name}_${mo}.pdf`);
+  tpl.innerHTML='';
+}
 </script>
 </body>
 </html>
