@@ -674,125 +674,111 @@ function renderResults(){
 }
 
 // ══════════════════════════════
-//  PDF — 司機版，清晰易讀
+//  PDF buildPDFHTML
 // ══════════════════════════════
-function buildPDFHTML(r){
-  const ml=getML();
-  const mo=document.getElementById('payMonth').value||'';
-  const disabledFees=Object.entries(r.fe||{}).filter(([,v])=>!v).map(([k])=>k);
+function buildPDFHTML(r,ml){
+  if(!ml)ml=getML();
   const totalTrips=r.sources.reduce((s,src)=>s+src.count,0);
 
-  // Trip rows per source — 用 flex 排版，html2canvas 不支援 table-layout:fixed
-  const COL=[90,120,130,120,80]; // 各欄固定像素寬：序號/訂單, 乘客, 路線, 費用, 金額
   const tripSections=r.sources.map(src=>{
-    const headerRow=`
-      <div style="display:flex;background:#f0ede8;padding:5px 0;border-bottom:1px solid #e0ddd6">
-        <div style="width:${COL[0]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0">#／訂單／時間</div>
-        <div style="width:${COL[1]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0">乘客／類型</div>
-        <div style="width:${COL[2]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0">路線</div>
-        <div style="width:${COL[3]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0">費用明細</div>
-        <div style="width:${COL[4]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0;text-align:right">金額</div>
-      </div>`;
     const rows=src.trips.map((t,i)=>{
       const feeStr=Object.entries(t.fees||{})
         .filter(([k,v])=>v!==0&&k!=='Meet舉牌費'&&r.fe[k]!==false)
-        .map(([k,v])=>`${k} $${v}`).join('  ');
-      const meetBadge=t.hasMeet?` 🪧`:'';
-      const bg=i%2===0?'#fff':'#f9f8f6';
-      return`
-        <div style="display:flex;background:${bg};padding:6px 0;border-bottom:1px solid #f5f3ee;align-items:flex-start">
-          <div style="width:${COL[0]}px;padding:0 8px;flex-shrink:0;overflow:hidden">
-            <div style="font-size:10px;color:#bbb">${String(i+1).padStart(2,'0')}</div>
-            <div style="font-size:9px;color:#1a5276;font-family:'IBM Plex Mono',monospace;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.orderId||''}</div>
-            <div style="font-size:9px;color:#aaa;margin-top:1px;white-space:nowrap">${t.time||''}</div>
-          </div>
-          <div style="width:${COL[1]}px;padding:0 8px;flex-shrink:0;overflow:hidden">
-            <div style="font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(t.member||'—')+meetBadge}</div>
-            <div style="font-size:9px;color:#888;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.type||''}</div>
-          </div>
-          <div style="width:${COL[2]}px;padding:0 8px;flex-shrink:0;overflow:hidden;font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:2">${(t.city?t.city+' → ':'')+(t.airport||'')}</div>
-          <div style="width:${COL[3]}px;padding:0 8px;flex-shrink:0;overflow:hidden;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:2">${feeStr||'—'}</div>
-          <div style="width:${COL[4]}px;padding:0 8px;flex-shrink:0;overflow:hidden;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#1e8449;font-size:12px;text-align:right;white-space:nowrap;line-height:2">${t.ov!==null?'<span style="font-size:8px;color:#e67e22">*</span>':''}$${t.finalTotal.toLocaleString()}</div>
-        </div>`;
+        .map(([k,v])=>k+' $'+v).join('  ');
+      const meetTag=t.hasMeet?'<span style="background:#fef3cd;color:#b7860b;border:1px solid #f0c040;border-radius:3px;padding:0 4px;font-size:10px;margin-left:4px">舉牌</span>':'';
+      const bg=i%2===0?'#ffffff':'#f9f8f6';
+      return `<div style="display:flex;background:${bg};border-bottom:1px solid #f0ede8;padding:7px 0;align-items:center">
+  <div style="width:130px;flex:0 0 130px;padding:0 10px;overflow:hidden">
+    <div style="font-size:10px;color:#aaa">${String(i+1).padStart(2,'0')}&nbsp;&nbsp;<span style="color:#1a5276;font-family:monospace">${t.orderId||''}</span></div>
+    <div style="font-size:10px;color:#888;margin-top:2px">${t.time||''}</div>
+  </div>
+  <div style="width:150px;flex:0 0 150px;padding:0 10px;overflow:hidden">
+    <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.member||'—'}${meetTag}</div>
+    <div style="font-size:10px;color:#888;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.type||''}</div>
+  </div>
+  <div style="width:180px;flex:0 0 180px;padding:0 10px;overflow:hidden;font-size:11px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(t.city?t.city+' → ':'')+t.airport||''}</div>
+  <div style="width:170px;flex:0 0 170px;padding:0 10px;overflow:hidden;font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${feeStr||'—'}</div>
+  <div style="flex:1;padding:0 10px;text-align:right;font-family:monospace;font-weight:700;font-size:14px;color:#1e8449;white-space:nowrap">${t.ov!=null?'<span style="font-size:9px;color:#e67e22">*</span>':''}$${t.finalTotal.toLocaleString()}</div>
+</div>`;
     }).join('');
-    return`
-      <div style="margin-bottom:16px">
-        <div style="padding:6px 10px;background:#1a1d27;color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;border-radius:4px 4px 0 0">${src.label} — ${src.count} 趟</div>
-        <div style="border:1px solid #e0ddd6;border-top:none;border-radius:0 0 4px 4px;overflow:hidden">
-          ${headerRow}${rows}
-        </div>
-      </div>`;
+    return `<div style="margin-bottom:20px">
+  <div style="background:#1a1d27;color:#fff;padding:7px 12px;font-size:12px;font-weight:700;border-radius:4px 4px 0 0">${src.label} — ${src.count} 趟</div>
+  <div style="border:1px solid #e0ddd6;border-top:none;border-radius:0 0 4px 4px;overflow:hidden">
+    <div style="display:flex;background:#f0ede8;padding:5px 0;font-size:10px;color:#888;font-weight:700">
+      <div style="width:130px;flex:0 0 130px;padding:0 10px">序號 / 訂單 / 時間</div>
+      <div style="width:150px;flex:0 0 150px;padding:0 10px">乘客 / 類型</div>
+      <div style="width:180px;flex:0 0 180px;padding:0 10px">路線</div>
+      <div style="width:170px;flex:0 0 170px;padding:0 10px">費用明細</div>
+      <div style="flex:1;padding:0 10px;text-align:right">金額</div>
+    </div>
+    ${rows}
+  </div>
+</div>`;
   }).join('');
 
-  const adjRows=r.adjs.length?r.adjs.map(a=>`
-    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ede8;font-size:12px">
+  const adjRows=r.adjs&&r.adjs.length?r.adjs.map(a=>`
+    <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f0ede8;font-size:13px">
       <span style="color:#555">${a.type==='plus'?'＋':'－'} ${a.desc||'調整項'}</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${a.type==='plus'?'#1e8449':'#c0392b'}">${a.type==='plus'?'+':'-'}$${(a.amount||0).toLocaleString()}</span>
+      <span style="font-family:monospace;font-weight:700;color:${a.type==='plus'?'#1e8449':'#c0392b'}">${a.type==='plus'?'+':'-'}$${(a.amount||0).toLocaleString()}</span>
     </div>`).join(''):'';
 
-  return`<div style="width:794px;background:#fff;font-family:'Noto Sans TC',sans-serif;color:#111">
-
-  <!-- TOP BANNER -->
-  <div style="background:linear-gradient(135deg,#111318 0%,#1a1d27 100%);color:#fff;padding:32px 48px 28px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+  return `<div style="width:794px;background:#fff;font-family:'Noto Sans TC',sans-serif;color:#111318">
+  <div style="background:#111318;color:#fff;padding:30px 40px 24px;border-bottom:3px solid #c0392b">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end">
       <div>
-        <div style="font-size:11px;color:#888;letter-spacing:2px;margin-bottom:6px">DRIVER PAYSLIP</div>
-        <div style="font-size:30px;font-weight:900;letter-spacing:.5px">${r.name}</div>
-        <div style="font-size:13px;color:#aaa;margin-top:4px">${ml} 薪資單</div>
+        <div style="font-size:28px;font-weight:900;letter-spacing:1px">${r.name}</div>
+        <div style="font-size:13px;color:#aaa;margin-top:6px">${ml} 薪資單</div>
       </div>
       <div style="text-align:right">
-        <div style="font-size:11px;color:#888;margin-bottom:6px">本月應領薪資</div>
-        <div style="font-size:38px;font-weight:900;color:#f1c40f;font-family:'IBM Plex Mono',monospace;line-height:1">$${r.netTotal.toLocaleString()}</div>
-        <div style="font-size:10px;color:#666;margin-top:6px">${totalTrips} 趟${r.plusAdj>0?' + 加項':''}${r.minusAdj>0?' − 減項':''}</div>
+        <div style="font-size:11px;color:#888;margin-bottom:4px">本月應領薪資</div>
+        <div style="font-size:34px;font-weight:900;color:#f1c40f;font-family:monospace;line-height:1">$${r.netTotal.toLocaleString()}</div>
       </div>
     </div>
-
-    <!-- INFO PILLS -->
-    <div style="display:flex;gap:10px;margin-top:22px;flex-wrap:wrap">
-      ${[['📅 結算月份',ml],['🚗 總趟數',totalTrips+' 趟']].map(([l,v])=>`
-        <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:8px 16px">
-          <div style="font-size:9px;color:#888;margin-bottom:2px">${l}</div>
-          <div style="font-size:14px;font-weight:700">${v}</div>
-        </div>`).join('')}
-      ${r.sources.map(src=>`
-        <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:8px 16px">
-          <div style="font-size:9px;color:#888;margin-bottom:2px">📊 ${src.label} 司機抽成</div>
-          <div style="font-size:14px;font-weight:700">${src.rate}%</div>
-        </div>`).join('')}
+    <div style="display:flex;gap:12px;margin-top:20px">
+      <div style="background:rgba(255,255,255,.1);border-radius:6px;padding:8px 16px">
+        <div style="font-size:10px;color:#888">結算月份</div>
+        <div style="font-size:14px;font-weight:700;margin-top:2px">${ml}</div>
+      </div>
+      <div style="background:rgba(255,255,255,.1);border-radius:6px;padding:8px 16px">
+        <div style="font-size:10px;color:#888">總趟數</div>
+        <div style="font-size:14px;font-weight:700;margin-top:2px">${totalTrips} 趟</div>
+      </div>
+      ${r.sources.map(src=>`<div style="background:rgba(255,255,255,.1);border-radius:6px;padding:8px 16px">
+        <div style="font-size:10px;color:#888">${src.label} 司機抽成</div>
+        <div style="font-size:14px;font-weight:700;margin-top:2px">${src.rate}%</div>
+      </div>`).join('')}
     </div>
   </div>
 
-  <!-- SUMMARY BOX -->
-  <div style="margin:24px 48px 0;border:1px solid #e0ddd6;border-radius:8px;overflow:hidden">
-    <div style="background:#f8f7f4;padding:10px 16px;font-size:10px;font-weight:700;color:#888;letter-spacing:.6px">薪資計算摘要</div>
-    <div style="padding:4px 16px 8px">
-      ${r.sources.map(src=>`
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ede8;font-size:12px">
-          <span style="color:#555">${src.label}（${src.count}趟）× ${src.rate}%</span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:#1e8449">$${src.netFromSrc.toLocaleString()}</span>
-        </div>`).join('')}
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e0ddd6;font-size:13px;font-weight:700"><span>各來源司機抽成合計</span><span style="font-family:'IBM Plex Mono',monospace">$${r.baseNet.toLocaleString()}</span></div>
+  <div style="margin:20px 40px;border:1px solid #e0ddd6;border-radius:8px;overflow:hidden">
+    <div style="background:#f8f7f4;padding:9px 14px;font-size:11px;font-weight:700;color:#888">薪資計算摘要</div>
+    <div style="padding:4px 14px 8px">
+      ${r.sources.map(src=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f0ede8;font-size:13px">
+        <span style="color:#555">${src.label}（${src.count} 趟）× ${src.rate}%</span>
+        <span style="font-family:monospace;font-weight:700;color:#1e8449">$${src.netFromSrc.toLocaleString()}</span>
+      </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;font-weight:700;border-bottom:1px solid #e0ddd6">
+        <span>各來源司機抽成合計</span><span style="font-family:monospace">$${r.baseNet.toLocaleString()}</span>
+      </div>
       ${adjRows}
     </div>
-    <div style="background:linear-gradient(135deg,#111318,#1a1d27);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:13px;font-weight:700">本月應領薪資</span>
-      <span style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#f1c40f">$${r.netTotal.toLocaleString()}</span>
+    <div style="background:#111318;color:#fff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:14px;font-weight:700">本月應領薪資</span>
+      <span style="font-size:22px;font-weight:900;font-family:monospace;color:#f1c40f">$${r.netTotal.toLocaleString()}</span>
     </div>
   </div>
 
-  <!-- TRIP DETAIL -->
-  <div style="margin:24px 48px 0">
-    <div style="font-size:11px;font-weight:700;color:#888;letter-spacing:.8px;margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid #111">趟次明細</div>
+  <div style="margin:0 40px 20px">
+    <div style="font-size:12px;font-weight:700;color:#888;padding-bottom:8px;border-bottom:2px solid #111318;margin-bottom:16px">趟次明細</div>
     ${tripSections}
   </div>
 
-  ${r.adjs.some(a=>a.ov!==null)?`<div style="margin:0 48px;padding:8px 12px;background:#fef9e7;border:1px solid #f9e79f;border-radius:4px;font-size:10px;color:#b7950b">* 標示金額為手動調整值</div>`:''}
-
-  <div style="margin:20px 48px 36px;padding-top:12px;border-top:1px solid #e0ddd6;font-size:10px;color:#bbb;text-align:center">
+  <div style="margin:0 40px 32px;padding-top:10px;border-top:1px solid #e0ddd6;font-size:10px;color:#bbb;text-align:center">
     此薪資單由系統自動產生　｜　如有疑問請聯繫公司管理人員　｜　列印日期：${new Date().toLocaleDateString('zh-TW')}
   </div>
 </div>`;
 }
+
 
 // ── 下載 Excel ──
 function dlExcel(idx){
@@ -807,203 +793,33 @@ async function dlPDF(idx){
   const r=payrollResult[idx];
   const mo=document.getElementById('payMonth').value||'本月';
   const ml=getML();
+  const tpl=document.getElementById('pdfTpl');
+  tpl.innerHTML=buildPDFHTML(r,ml);
+  tpl.style.left='-9999px';
+  await document.fonts.ready;
+  await new Promise(x=>setTimeout(x,500));
+  const canvas=await html2canvas(tpl,{scale:2,useCORS:true,backgroundColor:'#ffffff',width:794,logging:false});
   const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-  const PW=210,PH=297,ML=14,MR=14,MT=14;
-  const CW=PW-ML-MR; // 內容寬 182mm
-  let y=MT;
-
-  // ── 載入中文字型（用 Base64 內嵌）──
-  // jsPDF 預設不支援中文，改用 canvas 渲染每一行文字再貼圖
-  // 建立離屏 canvas 渲染文字
-  const fc=document.createElement('canvas');
-  fc.width=Math.round(CW/0.264583)*2; // 182mm → px @2x
-  const fcw=fc.width;
-  const fctx=fc.getContext('2d');
-
-  function mm2px(mm){return Math.round(mm/0.264583*2);}
-  function px2mm(px){return px*0.264583/2;}
-
-  // 繪製一段文字到 canvas，回傳圖片 dataURL 和實際高度(mm)
-  function renderTextBlock(lines,opts){
-    // lines: [{text, size, bold, color, align, x_mm, maxW_mm}]
-    const scale=2;
-    const blockH_px=lines.reduce((s,l)=>{
-      const lh=(l.lineHeight||1.5);
-      return s+Math.ceil(l.size*scale*lh);
-    },0)+4;
-    const tc=document.createElement('canvas');
-    tc.width=Math.round(CW/0.264583)*scale;
-    tc.height=blockH_px;
-    const ctx=tc.getContext('2d');
-    ctx.clearRect(0,0,tc.width,tc.height);
-    let cy=0;
-    lines.forEach(l=>{
-      const fs=Math.round(l.size*scale);
-      ctx.font=`${l.bold?'bold ':''} ${fs}px 'Noto Sans TC', sans-serif`;
-      ctx.fillStyle=l.color||'#111318';
-      ctx.textBaseline='top';
-      const maxW=l.maxW_mm?mm2px(l.maxW_mm):tc.width;
-      const x=l.x_mm?mm2px(l.x_mm):0;
-      // 截斷超長文字
-      let txt=String(l.text||'');
-      while(ctx.measureText(txt).width>maxW-4&&txt.length>1)txt=txt.slice(0,-1);
-      if(String(l.text||'').length>txt.length)txt+='…';
-      if(l.align==='right'){
-        const tw=ctx.measureText(txt).width;
-        ctx.fillText(txt,tc.width-4-tw,cy+2);
-      } else {
-        ctx.fillText(txt,x+2,cy+2);
-      }
-      cy+=Math.ceil(fs*(l.lineHeight||1.5));
-    });
-    return{dataUrl:tc.toDataURL('image/png'),h_mm:px2mm(blockH_px),w_mm:CW};
+  const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
+  const ratio=canvas.height/canvas.width;
+  const imgH=pw*ratio;
+  if(imgH<=ph){
+    pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,pw,imgH);
+  } else {
+    const pagePixH=Math.floor(canvas.width*(ph/pw));
+    let y=0;
+    while(y<canvas.height){
+      const sliceH=Math.min(pagePixH,canvas.height-y);
+      const sc=document.createElement('canvas');
+      sc.width=canvas.width;sc.height=sliceH;
+      sc.getContext('2d').drawImage(canvas,0,-y);
+      if(y>0)pdf.addPage();
+      pdf.addImage(sc.toDataURL('image/png'),'PNG',0,0,pw,sliceH*(pw/canvas.width));
+      y+=sliceH;
+    }
   }
-
-  function addPageIfNeeded(neededMm){
-    if(y+neededMm>PH-10){pdf.addPage();y=MT;}
-  }
-
-  function addRect(x,yw,h,fill,stroke){
-    if(fill){pdf.setFillColor(...hexToRgb(fill));pdf.rect(x,yw,CW,h,'F');}
-    if(stroke){pdf.setDrawColor(...hexToRgb(stroke));pdf.rect(x,yw,CW,h,'S');}
-  }
-  function hexToRgb(hex){
-    const h=hex.replace('#','');
-    return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];
-  }
-  function drawText(text,x,yw,size,opts={}){
-    const tc=document.createElement('canvas');
-    const scale=3;
-    const fs=Math.round(size*scale*3.7795); // pt to px
-    tc.height=Math.ceil(fs*1.6);
-    tc.width=opts.maxW?mm2px(opts.maxW)*scale:fcw;
-    const ctx=tc.getContext('2d');
-    ctx.clearRect(0,0,tc.width,tc.height);
-    ctx.font=`${opts.bold?'bold ':''} ${fs}px 'Noto Sans TC',sans-serif`;
-    ctx.fillStyle=opts.color||'#111318';
-    ctx.textBaseline='top';
-    let txt=String(text||'');
-    const maxPx=tc.width-6;
-    while(ctx.measureText(txt).width>maxPx&&txt.length>1)txt=txt.slice(0,-1);
-    if(String(text||'').length>txt.length)txt+='…';
-    if(opts.align==='right'){
-      const tw=ctx.measureText(txt).width;
-      ctx.fillText(txt,tc.width-3-tw,2);
-    }else{ctx.fillText(txt,3,2);}
-    const h_mm=px2mm(tc.height)/scale;
-    const w_mm=opts.maxW||CW;
-    pdf.addImage(tc.toDataURL('image/png'),'PNG',x,yw,w_mm,h_mm);
-    return h_mm;
-  }
-
-  const totalTrips=r.sources.reduce((s,src)=>s+src.count,0);
-
-  // ═══ 頂部深色橫幅 ═══
-  const bannerH=42;
-  pdf.setFillColor(17,19,24);
-  pdf.rect(0,0,PW,bannerH,'F');
-  pdf.setFillColor(192,57,43);
-  pdf.rect(0,bannerH-1,PW,1,'F');
-
-  // 司機名稱
-  drawText(r.name,ML,6,18,{bold:true,color:'#ffffff'});
-  drawText(ml+' 薪資單',ML,18,9,{color:'#aaaaaa'});
-  // 應領金額
-  drawText('本月應領薪資',PW-ML-50,6,8,{color:'#888888',align:'right',maxW:50});
-  drawText('$'+r.netTotal.toLocaleString(),PW-ML-60,12,16,{bold:true,color:'#f1c40f',align:'right',maxW:60});
-
-  y=bannerH+6;
-
-  // ═══ 資訊欄 ═══
-  const infoW=CW/3;
-  const infos=[[`${totalTrips} 趟`,'總趟數'],[ml,'結算月份'],...r.sources.map(s=>[s.rate+'%',s.label+' 司機抽成'])];
-  infos.forEach((item,i)=>{
-    const ix=ML+i*infoW;
-    drawText(item[1],ix,y,6.5,{color:'#888888',maxW:infoW});
-    drawText(item[0],ix,y+4.5,11,{bold:true,color:'#111318',maxW:infoW});
-  });
-  y+=18;
-
-  // ═══ 薪資摘要 ═══
-  pdf.setFillColor(248,247,244);pdf.rect(ML,y,CW,6,'F');
-  drawText('薪資計算摘要',ML+2,y+1,7,{bold:true,color:'#888888'});
-  y+=7;
-  r.sources.forEach(src=>{
-    drawText(`${src.label}（${src.count}趟）× ${src.rate}%`,ML+2,y+1,8,{color:'#555555',maxW:CW*0.7});
-    drawText('$'+src.netFromSrc.toLocaleString(),ML,y+1,8,{bold:true,color:'#1e8449',align:'right',maxW:CW-2});
-    y+=6;
-    pdf.setDrawColor(240,237,232);pdf.line(ML,y,ML+CW,y);
-  });
-  drawText('各來源司機抽成合計',ML+2,y+1,8,{bold:true,maxW:CW*0.7});
-  drawText('$'+r.baseNet.toLocaleString(),ML,y+1,8,{bold:true,align:'right',maxW:CW-2});
-  y+=7;
-  r.adjs.forEach(a=>{
-    drawText((a.type==='plus'?'＋':'－')+' '+(a.desc||'調整項'),ML+2,y+1,8,{color:'#555555',maxW:CW*0.7});
-    drawText((a.type==='plus'?'+':'-')+'$'+(a.amount||0).toLocaleString(),ML,y+1,8,{bold:true,color:a.type==='plus'?'#1e8449':'#c0392b',align:'right',maxW:CW-2});
-    y+=6;
-  });
-  // 應領薪資深色列
-  pdf.setFillColor(17,19,24);pdf.rect(ML,y,CW,9,'F');
-  drawText('本月應領薪資',ML+2,y+1,9,{bold:true,color:'#ffffff',maxW:CW*0.6});
-  drawText('$'+r.netTotal.toLocaleString(),ML,y+1,11,{bold:true,color:'#f1c40f',align:'right',maxW:CW-2});
-  y+=13;
-
-  // ═══ 趟次明細 ═══
-  pdf.setDrawColor(17,19,24);pdf.line(ML,y,ML+CW,y);
-  drawText('趟次明細',ML,y+1,8,{bold:true,color:'#888888'});
-  y+=7;
-
-  // 欄寬 (mm)
-  const C=[28,38,40,48,28]; // #/訂單/時間, 乘客/類型, 路線, 費用明細, 金額
-  const CX=[ML, ML+C[0], ML+C[0]+C[1], ML+C[0]+C[1]+C[2], ML+C[0]+C[1]+C[2]+C[3]];
-
-  r.sources.forEach(src=>{
-    addPageIfNeeded(14);
-    // 來源標題
-    pdf.setFillColor(26,29,39);pdf.rect(ML,y,CW,6,'F');
-    drawText(src.label+' — '+src.count+' 趟',ML+2,y+1,8,{bold:true,color:'#ffffff',maxW:CW-4});
-    y+=7;
-    // 欄標題
-    pdf.setFillColor(240,237,232);pdf.rect(ML,y,CW,5,'F');
-    ['#／訂單','乘客／類型','路線','費用明細','金額'].forEach((h,ci)=>{
-      drawText(h,CX[ci]+1,y+0.5,6.5,{color:'#888888',maxW:C[ci]-2,align:ci===4?'right':undefined});
-    });
-    y+=6;
-
-    src.trips.forEach((t,ti)=>{
-      addPageIfNeeded(10);
-      const bg=ti%2===0?[255,255,255]:[249,248,246];
-      pdf.setFillColor(...bg);pdf.rect(ML,y,CW,9,'F');
-
-      const feeStr=Object.entries(t.fees||{}).filter(([k,v])=>v!==0&&k!=='Meet舉牌費'&&r.fe[k]!==false).map(([k,v])=>`${k}$${v}`).join(' ');
-      const meetMark=t.hasMeet?' 🪧':'';
-
-      // 欄 0：序號+訂單+時間
-      drawText(String(ti+1).padStart(2,'0'),CX[0]+1,y+0.5,7.5,{color:'#bbbbbb',maxW:C[0]-2});
-      drawText(t.orderId||'',CX[0]+1,y+3.5,7,{color:'#1a5276',maxW:C[0]-2});
-      drawText(t.time||'',CX[0]+1,y+6.5,6.5,{color:'#aaaaaa',maxW:C[0]-2});
-      // 欄 1：乘客
-      drawText((t.member||'—')+meetMark,CX[1]+1,y+1,8.5,{bold:false,maxW:C[1]-2});
-      drawText(t.type||'',CX[1]+1,y+5.5,7,{color:'#888888',maxW:C[1]-2});
-      // 欄 2：路線
-      drawText((t.city?t.city+' →':'')+' '+(t.airport||''),CX[2]+1,y+3,8,{color:'#666666',maxW:C[2]-2});
-      // 欄 3：費用
-      drawText(feeStr||'—',CX[3]+1,y+3,7.5,{color:'#555555',maxW:C[3]-2});
-      // 欄 4：金額
-      drawText('$'+t.finalTotal.toLocaleString(),CX[4],y+3,9,{bold:true,color:'#1e8449',align:'right',maxW:C[4]-2});
-
-      pdf.setDrawColor(245,243,238);pdf.line(ML,y+9,ML+CW,y+9);
-      y+=10;
-    });
-    y+=4;
-  });
-
-  // ═══ 頁尾 ═══
-  addPageIfNeeded(10);
-  pdf.setDrawColor(224,221,214);pdf.line(ML,y,ML+CW,y);
-  drawText('此薪資單由系統自動產生　｜　如有疑問請聯繫公司管理人員　｜　列印日期：'+new Date().toLocaleDateString('zh-TW'),ML,y+2,7,{color:'#bbbbbb'});
-
-  pdf.save(`薪資單_${r.name}_${mo}.pdf`);
+  pdf.save('薪資單_'+r.name+'_'+mo+'.pdf');
+  tpl.innerHTML='';
 }
 async function dlAllPDF(){
   for(let i=0;i<payrollResult.length;i++){
@@ -1012,14 +828,12 @@ async function dlAllPDF(){
   }
 }
 async function renderPDF(r,mo){
-  // 上傳 Excel 後產生 PDF，使用相同邏輯
-  const savedResult=payrollResult;
-  // 暫時借用 payrollResult slot
-  const fakeIdx=payrollResult.length;
+  const savedResult=[...payrollResult];
   payrollResult.push(r);
-  await dlPDF(fakeIdx);
+  await dlPDF(payrollResult.length-1);
   payrollResult=savedResult;
 }
+
 
 function buildExcelWb(r,ml){
   const wb=XLSX.utils.book_new();
