@@ -682,43 +682,46 @@ function buildPDFHTML(r){
   const disabledFees=Object.entries(r.fe||{}).filter(([,v])=>!v).map(([k])=>k);
   const totalTrips=r.sources.reduce((s,src)=>s+src.count,0);
 
-  // Trip rows per source
+  // Trip rows per source — 用 flex 排版，html2canvas 不支援 table-layout:fixed
+  const COL=[90,120,130,120,80]; // 各欄固定像素寬：序號/訂單, 乘客, 路線, 費用, 金額
   const tripSections=r.sources.map(src=>{
+    const headerRow=`
+      <div style="display:flex;background:#f0ede8;padding:5px 0;border-bottom:1px solid #e0ddd6">
+        <div style="width:${COL[0]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0">#／訂單／時間</div>
+        <div style="width:${COL[1]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0">乘客／類型</div>
+        <div style="width:${COL[2]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0">路線</div>
+        <div style="width:${COL[3]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0">費用明細</div>
+        <div style="width:${COL[4]}px;padding:0 8px;font-size:9px;color:#888;font-weight:700;flex-shrink:0;text-align:right">金額</div>
+      </div>`;
     const rows=src.trips.map((t,i)=>{
-      const feeStr=Object.entries(t.fees||{}).filter(([k,v])=>v!==0&&r.fe[k]!==false)
-        .map(([k,v])=>`<span style="display:inline-block;background:#f0f4f8;border-radius:3px;padding:1px 6px;margin:1px;font-size:9px;color:#555">${k} <b>$${v}</b></span>`).join('');
-      return`<tr style="background:${i%2===0?'#fff':'#f9f8f6'}">
-        <td style="padding:5px 8px;overflow:hidden;max-width:88px">
-          <div style="font-family:'IBM Plex Mono',monospace;color:#bbb;font-size:10px">${String(i+1).padStart(2,'0')}</div>
-          <div style="font-family:'IBM Plex Mono',monospace;color:#1a5276;font-size:9px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.orderId||''}</div>
-          <div style="color:#aaa;font-size:9px;margin-top:1px;white-space:nowrap">${t.time||''}</div>
-        </td>
-        <td style="padding:5px 8px;overflow:hidden;max-width:100px">
-          <div style="font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.member||'—'}</div>
-          <div style="font-size:9px;color:#888;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.type||''}</div>
-        </td>
-        <td style="padding:5px 8px;overflow:hidden;max-width:110px;font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(t.city||'')+(t.airport?' → '+t.airport:'')}</td>
-        <td style="padding:5px 8px;overflow:hidden;max-width:110px">
-          <div style="font-size:9px;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${feeStr||'—'}</div>
-        </td>
-        <td style="padding:5px 8px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#1e8449;font-size:12px;white-space:nowrap;overflow:hidden;max-width:82px">${t.ov!==null?'<span style="font-size:9px;color:#e67e22">*</span>':''}$${t.finalTotal.toLocaleString()}</td>
-      </tr>`;
+      const feeStr=Object.entries(t.fees||{})
+        .filter(([k,v])=>v!==0&&k!=='Meet舉牌費'&&r.fe[k]!==false)
+        .map(([k,v])=>`${k} $${v}`).join('  ');
+      const meetBadge=t.hasMeet?` 🪧`:'';
+      const bg=i%2===0?'#fff':'#f9f8f6';
+      return`
+        <div style="display:flex;background:${bg};padding:6px 0;border-bottom:1px solid #f5f3ee;align-items:flex-start">
+          <div style="width:${COL[0]}px;padding:0 8px;flex-shrink:0;overflow:hidden">
+            <div style="font-size:10px;color:#bbb">${String(i+1).padStart(2,'0')}</div>
+            <div style="font-size:9px;color:#1a5276;font-family:'IBM Plex Mono',monospace;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.orderId||''}</div>
+            <div style="font-size:9px;color:#aaa;margin-top:1px;white-space:nowrap">${t.time||''}</div>
+          </div>
+          <div style="width:${COL[1]}px;padding:0 8px;flex-shrink:0;overflow:hidden">
+            <div style="font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(t.member||'—')+meetBadge}</div>
+            <div style="font-size:9px;color:#888;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.type||''}</div>
+          </div>
+          <div style="width:${COL[2]}px;padding:0 8px;flex-shrink:0;overflow:hidden;font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:2">${(t.city?t.city+' → ':'')+(t.airport||'')}</div>
+          <div style="width:${COL[3]}px;padding:0 8px;flex-shrink:0;overflow:hidden;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:2">${feeStr||'—'}</div>
+          <div style="width:${COL[4]}px;padding:0 8px;flex-shrink:0;overflow:hidden;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#1e8449;font-size:12px;text-align:right;white-space:nowrap;line-height:2">${t.ov!==null?'<span style="font-size:8px;color:#e67e22">*</span>':''}$${t.finalTotal.toLocaleString()}</div>
+        </div>`;
     }).join('');
     return`
-      <div style="margin-bottom:4px;padding:5px 10px;background:#1a1d27;color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;border-radius:3px 3px 0 0">${src.label} — ${src.count} 趟</div>
-      <table style="width:490px;border-collapse:collapse;margin-bottom:12px;table-layout:fixed">
-        <colgroup>
-          <col style="width:88px"><col style="width:100px"><col style="width:110px"><col style="width:110px"><col style="width:82px">
-        </colgroup>
-        <thead><tr style="background:#f0ede8">
-          <th style="padding:5px 8px;text-align:left;font-size:9px;color:#888;font-weight:700">#／訂單／時間</th>
-          <th style="padding:5px 8px;text-align:left;font-size:9px;color:#888;font-weight:700">乘客／類型</th>
-          <th style="padding:5px 8px;text-align:left;font-size:9px;color:#888;font-weight:700">路線</th>
-          <th style="padding:5px 8px;text-align:left;font-size:9px;color:#888;font-weight:700">費用明細</th>
-          <th style="padding:5px 8px;text-align:right;font-size:9px;color:#888;font-weight:700">金額</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+      <div style="margin-bottom:16px">
+        <div style="padding:6px 10px;background:#1a1d27;color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;border-radius:4px 4px 0 0">${src.label} — ${src.count} 趟</div>
+        <div style="border:1px solid #e0ddd6;border-top:none;border-radius:0 0 4px 4px;overflow:hidden">
+          ${headerRow}${rows}
+        </div>
+      </div>`;
   }).join('');
 
   const adjRows=r.adjs.length?r.adjs.map(a=>`
