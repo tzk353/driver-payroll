@@ -203,23 +203,23 @@ header{background:var(--ink);color:#fff;padding:15px 28px;display:flex;align-ite
 
     <!-- ① 下載 Excel 給老闆 -->
     <div class="card" style="margin-bottom:14px">
-      <div class="card-hd">① 下載 Excel 給老闆確認</div>
+      <div class="card-hd">① 下載 Excel 給老闆確認 <small>老闆在 Excel 修改後，上傳產生最終 PDF</small></div>
       <div style="padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-orange" onclick="dlAllExcel()">📊 全部下載 Excel</button>
+        <button class="btn btn-green" onclick="dlAllPDF()">📄 全部下載 PDF（直接產生）</button>
         <span style="font-size:11px;color:var(--muted)">或在下方卡片個別下載</span>
       </div>
     </div>
 
-    <!-- ② 上傳老闆改好的 Excel → 產生 PDF -->
+    <!-- ② 上傳老闆改好的 Excel → 產生 PDF（選填） -->
     <div class="card" style="margin-bottom:22px">
-      <div class="card-hd">② 上傳老闆確認後的 Excel，產生 PDF 傳給司機</div>
+      <div class="card-hd">② 上傳老闆改好的 Excel → 產生最終 PDF <small>選填，若老闆有修改才需要</small></div>
       <div style="padding:12px 18px">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--s2);border:1px solid var(--rule);border-radius:5px;padding:9px 16px;font-size:12px;font-weight:600;transition:border-color .2s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--rule)'">
             📂 選擇 Excel（可一次多選）
             <input type="file" accept=".xlsx" multiple style="display:none" onchange="handleExcelToPDF(this.files)">
           </label>
-          <button class="btn btn-green" onclick="dlAllPDF()" style="padding:9px 16px">📄 全部下載 PDF（不需老闆確認）</button>
         </div>
         <div id="pdfStatus" style="margin-top:10px;font-size:12px;min-height:20px;line-height:2"></div>
       </div>
@@ -900,42 +900,60 @@ function readExcelData(file){
 
         const name=String(rows2[0]?.[1]||'').trim();
         const ml=String(rows2[1]?.[1]||'').trim();
-        let netTotal=0,tripsTotal=0,baseNet=0,rate=90;
+        let netTotal=0,baseNet=0;
         const adjs=[];
+        const srcRates={};
+
         rows2.forEach(row=>{
           const label=String(row[0]||'').trim();
           const val=parseFloat(row[1]);
-          if(label==='趟次總額'&&!isNaN(val))tripsTotal=val;
-          if(label==='稅前薪資'&&!isNaN(val))baseNet=val;
+          // 各來源司機抽成：格式「格上司機抽成（90%）」
+          const rateMatch=label.match(/^(.+?)司機抽成（(\d+)%）$/);
+          if(rateMatch){srcRates[rateMatch[1]]=parseFloat(rateMatch[2])||90;}
+          if(label==='各來源司機抽成合計'&&!isNaN(val))baseNet=val;
           if(label==='本月應領薪資'&&!isNaN(val))netTotal=val;
-          if(label==='抽成比例')rate=parseFloat(String(row[1]).replace('%',''))||90;
-          if(label&&!['項目','趟次總額','稅前薪資','本月應領薪資','抽成比例','司機姓名','結算月份',''].includes(label)
-            &&!isNaN(val)&&val!==0&&!label.includes('趟次合計'))
+          // 加減項
+          if(label&&!['項目','各來源司機抽成合計','本月應領薪資','司機姓名','結算月份',''].includes(label)
+            &&!rateMatch&&!label.includes('趟次合計')&&!isNaN(val)&&val!==0)
             adjs.push({desc:label,amount:Math.abs(val),type:val>=0?'plus':'minus'});
         });
+
+        // 找標題行，確認「計入金額」在哪一欄
+        const hRow=rows1[0]||[];
+        const totalCol=hRow.findIndex(h=>String(h).includes('計入金額'));
+        const finalCol=totalCol>=0?totalCol:19; // 預設19（含Meet欄後）
 
         const sourcesMap={};let curSrc='';
         rows1.slice(1).forEach(row=>{
           const col0=String(row[0]||'').trim();
-          const finalTotal=parseFloat(row[18]);
+          const finalTotal=parseFloat(row[finalCol]);
           if(col0&&isNaN(parseInt(col0))&&!row[1]&&!row[2]){
             curSrc=col0;
-            if(!sourcesMap[curSrc])sourcesMap[curSrc]={label:curSrc,count:0,subtotal:0,trips:[]};
+            if(!sourcesMap[curSrc])sourcesMap[curSrc]={label:curSrc,count:0,subtotal:0,trips:[],rate:srcRates[curSrc]||90};
           } else if(curSrc&&!isNaN(finalTotal)&&finalTotal>0){
+            const meetCol=hRow.findIndex(h=>String(h).includes('Meet'));
+            const hasMeet=meetCol>=0&&String(row[meetCol]||'').includes('Meet');
             sourcesMap[curSrc].trips.push({
-              orderId:String(row[1]||''),time:String(row[2]||''),member:String(row[3]||''),
-              type:String(row[4]||''),city:String(row[5]||''),airport:'',car:String(row[6]||''),
-              fees:{},finalTotal,ov:null
+              orderId:String(row[1]||''),time:String(row[2]||''),
+              member:String(row[3]||''),type:String(row[4]||''),
+              city:String(row[5]||''),airport:'',car:String(row[6]||''),
+              fees:{},finalTotal,ov:null,hasMeet
             });
             sourcesMap[curSrc].subtotal+=finalTotal;
             sourcesMap[curSrc].count++;
           }
         });
 
-        res({name,ml,rate,tripsTotal,baseNet,netTotal,
-          plusAdj:adjs.filter(a=>a.type==='plus').reduce((s,a)=>s+a.amount,0),
-          minusAdj:adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+a.amount,0),
-          sources:Object.values(sourcesMap),adjs,fe:{}});
+        const sources=Object.values(sourcesMap).map(src=>({
+          ...src,
+          netFromSrc:Math.round(src.subtotal*(src.rate/100))
+        }));
+        const tripsTotal=sources.reduce((s,src)=>s+src.subtotal,0);
+        const plusAdj=adjs.filter(a=>a.type==='plus').reduce((s,a)=>s+a.amount,0);
+        const minusAdj=adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+a.amount,0);
+
+        res({name,ml,tripsTotal,baseNet,netTotal,plusAdj,minusAdj,
+             sources,adjs,fe:{},srcRates});
       }catch(err){rej(err)}
     };
     reader.onerror=()=>rej(new Error('讀取失敗'));
