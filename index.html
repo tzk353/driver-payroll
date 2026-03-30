@@ -688,30 +688,29 @@ function buildPDFHTML(r){
       const feeStr=Object.entries(t.fees||{}).filter(([k,v])=>v!==0&&r.fe[k]!==false)
         .map(([k,v])=>`<span style="display:inline-block;background:#f0f4f8;border-radius:3px;padding:1px 6px;margin:1px;font-size:9px;color:#555">${k} <b>$${v}</b></span>`).join('');
       return`<tr style="background:${i%2===0?'#fff':'#f9f8f6'}">
-        <td style="padding:8px 10px;color:#bbb;font-family:'IBM Plex Mono',monospace;font-size:10px;width:32px">${String(i+1).padStart(2,'0')}</td>
-        <td style="padding:8px 10px">
-          <div style="font-size:11px;font-weight:600;color:#1a5276;font-family:'IBM Plex Mono',monospace">${t.orderId||'—'}</div>
-          <div style="font-size:10px;color:#888;margin-top:1px">${t.time||''}</div>
+        <td style="padding:5px 9px;width:90px">
+          <div style="font-family:'IBM Plex Mono',monospace;color:#bbb;font-size:10px">${String(i+1).padStart(2,'0')}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;color:#1a5276;font-size:9px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.orderId||''}</div>
+          <div style="color:#aaa;font-size:9px;margin-top:1px">${t.time||''}</div>
         </td>
-        <td style="padding:8px 10px">
-          <div style="font-size:12px;font-weight:500">${t.member||'—'}</div>
-          <div style="font-size:10px;color:#888;margin-top:1px">${t.type||''}</div>
+        <td style="padding:5px 9px;width:110px;max-width:110px">
+          <div style="font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.member||'—'}</div>
+          <div style="font-size:9px;color:#888;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.type||''}</div>
         </td>
-        <td style="padding:8px 10px;font-size:10px;color:#666">${t.city?t.city+' →':''} ${t.airport||''}</td>
-        <td style="padding:8px 10px"><div style="line-height:1.8">${feeStr}</div></td>
-        <td style="padding:8px 12px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#1e8449;font-size:13px;white-space:nowrap">${t.ov!==null?'<span style="font-size:9px;color:#e67e22">*</span>':''}$${t.finalTotal.toLocaleString()}</td>
+        <td style="padding:5px 9px;width:120px;max-width:120px;font-size:10px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(t.city||'')+(t.airport?' → '+t.airport:'')}</td>
+        <td style="padding:5px 9px;width:100px;max-width:100px"><div style="font-size:9px;line-height:1.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${feeStr||'—'}</div></td>
+        <td style="padding:5px 10px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#1e8449;font-size:12px;white-space:nowrap;width:70px">${t.ov!==null?'<span style="font-size:9px;color:#e67e22">*</span>':''}$${t.finalTotal.toLocaleString()}</td>
       </tr>`;
     }).join('');
     return`
       <div style="margin-bottom:4px;padding:5px 10px;background:#1a1d27;color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;border-radius:3px 3px 0 0">${src.label} — ${src.count} 趟</div>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+      <table style="width:100%;border-collapse:collapse;margin-bottom:12px;table-layout:fixed">
         <thead><tr style="background:#f0ede8">
-          <th style="padding:6px 10px;text-align:left;font-size:9px;color:#888;font-weight:700">#</th>
-          <th style="padding:6px 10px;text-align:left;font-size:9px;color:#888;font-weight:700">訂單 / 時間</th>
-          <th style="padding:6px 10px;text-align:left;font-size:9px;color:#888;font-weight:700">乘客 / 類型</th>
-          <th style="padding:6px 10px;text-align:left;font-size:9px;color:#888;font-weight:700">路線</th>
-          <th style="padding:6px 10px;text-align:left;font-size:9px;color:#888;font-weight:700">費用明細</th>
-          <th style="padding:6px 10px;text-align:right;font-size:9px;color:#888;font-weight:700">計入金額</th>
+          <th style="padding:6px 9px;text-align:left;font-size:9px;color:#888;font-weight:700;width:90px">#／訂單／時間</th>
+          <th style="padding:6px 9px;text-align:left;font-size:9px;color:#888;font-weight:700;width:110px">乘客／類型</th>
+          <th style="padding:6px 9px;text-align:left;font-size:9px;color:#888;font-weight:700;width:120px">路線</th>
+          <th style="padding:6px 9px;text-align:left;font-size:9px;color:#888;font-weight:700;width:100px">費用明細</th>
+          <th style="padding:6px 9px;text-align:right;font-size:9px;color:#888;font-weight:700;width:70px">金額</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -752,7 +751,6 @@ function buildPDFHTML(r){
           <div style="font-size:9px;color:#888;margin-bottom:2px">📊 ${src.label} 司機抽成</div>
           <div style="font-size:14px;font-weight:700">${src.rate}%</div>
         </div>`).join('')}
-      ${disabledFees.length?`<div style="background:rgba(230,126,34,.15);border:1px solid rgba(230,126,34,.3);border-radius:6px;padding:8px 16px"><div style="font-size:9px;color:#e67e22;margin-bottom:2px">⚠️ 未計入費用</div><div style="font-size:12px;font-weight:700;color:#e67e22">${disabledFees.join('、')}</div></div>`:''}
     </div>
   </div>
 
