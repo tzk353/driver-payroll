@@ -218,7 +218,7 @@ header{background:var(--ink);color:#fff;padding:15px 28px;display:flex;align-ite
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--s2);border:1px solid var(--rule);border-radius:5px;padding:9px 16px;font-size:12px;font-weight:600;transition:border-color .2s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--rule)'">
             📂 選擇 Excel（可一次多選）
-            <input type="file" accept=".xlsx" multiple style="display:none" onchange="handleExcelToPDF(this.files)">
+            <input type="file" accept=".xlsx" multiple style="display:none" onchange="handleExcelToPDF(this)">
           </label>
         </div>
         <div id="pdfStatus" style="margin-top:10px;font-size:12px;min-height:20px;line-height:2"></div>
@@ -688,29 +688,34 @@ function buildPDFHTML(r){
       const feeStr=Object.entries(t.fees||{}).filter(([k,v])=>v!==0&&r.fe[k]!==false)
         .map(([k,v])=>`<span style="display:inline-block;background:#f0f4f8;border-radius:3px;padding:1px 6px;margin:1px;font-size:9px;color:#555">${k} <b>$${v}</b></span>`).join('');
       return`<tr style="background:${i%2===0?'#fff':'#f9f8f6'}">
-        <td style="padding:5px 9px;width:90px">
+        <td style="padding:5px 8px;overflow:hidden;max-width:88px">
           <div style="font-family:'IBM Plex Mono',monospace;color:#bbb;font-size:10px">${String(i+1).padStart(2,'0')}</div>
-          <div style="font-family:'IBM Plex Mono',monospace;color:#1a5276;font-size:9px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.orderId||''}</div>
-          <div style="color:#aaa;font-size:9px;margin-top:1px">${t.time||''}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;color:#1a5276;font-size:9px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.orderId||''}</div>
+          <div style="color:#aaa;font-size:9px;margin-top:1px;white-space:nowrap">${t.time||''}</div>
         </td>
-        <td style="padding:5px 9px;width:110px;max-width:110px">
-          <div style="font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.member||'—'}</div>
-          <div style="font-size:9px;color:#888;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.type||''}</div>
+        <td style="padding:5px 8px;overflow:hidden;max-width:100px">
+          <div style="font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.member||'—'}</div>
+          <div style="font-size:9px;color:#888;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.type||''}</div>
         </td>
-        <td style="padding:5px 9px;width:120px;max-width:120px;font-size:10px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(t.city||'')+(t.airport?' → '+t.airport:'')}</td>
-        <td style="padding:5px 9px;width:100px;max-width:100px"><div style="font-size:9px;line-height:1.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${feeStr||'—'}</div></td>
-        <td style="padding:5px 10px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#1e8449;font-size:12px;white-space:nowrap;width:70px">${t.ov!==null?'<span style="font-size:9px;color:#e67e22">*</span>':''}$${t.finalTotal.toLocaleString()}</td>
+        <td style="padding:5px 8px;overflow:hidden;max-width:110px;font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(t.city||'')+(t.airport?' → '+t.airport:'')}</td>
+        <td style="padding:5px 8px;overflow:hidden;max-width:110px">
+          <div style="font-size:9px;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${feeStr||'—'}</div>
+        </td>
+        <td style="padding:5px 8px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#1e8449;font-size:12px;white-space:nowrap;overflow:hidden;max-width:82px">${t.ov!==null?'<span style="font-size:9px;color:#e67e22">*</span>':''}$${t.finalTotal.toLocaleString()}</td>
       </tr>`;
     }).join('');
     return`
       <div style="margin-bottom:4px;padding:5px 10px;background:#1a1d27;color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;border-radius:3px 3px 0 0">${src.label} — ${src.count} 趟</div>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:12px;table-layout:fixed">
+      <table style="width:490px;border-collapse:collapse;margin-bottom:12px;table-layout:fixed">
+        <colgroup>
+          <col style="width:88px"><col style="width:100px"><col style="width:110px"><col style="width:110px"><col style="width:82px">
+        </colgroup>
         <thead><tr style="background:#f0ede8">
-          <th style="padding:6px 9px;text-align:left;font-size:9px;color:#888;font-weight:700;width:90px">#／訂單／時間</th>
-          <th style="padding:6px 9px;text-align:left;font-size:9px;color:#888;font-weight:700;width:110px">乘客／類型</th>
-          <th style="padding:6px 9px;text-align:left;font-size:9px;color:#888;font-weight:700;width:120px">路線</th>
-          <th style="padding:6px 9px;text-align:left;font-size:9px;color:#888;font-weight:700;width:100px">費用明細</th>
-          <th style="padding:6px 9px;text-align:right;font-size:9px;color:#888;font-weight:700;width:70px">金額</th>
+          <th style="padding:5px 8px;text-align:left;font-size:9px;color:#888;font-weight:700">#／訂單／時間</th>
+          <th style="padding:5px 8px;text-align:left;font-size:9px;color:#888;font-weight:700">乘客／類型</th>
+          <th style="padding:5px 8px;text-align:left;font-size:9px;color:#888;font-weight:700">路線</th>
+          <th style="padding:5px 8px;text-align:left;font-size:9px;color:#888;font-weight:700">費用明細</th>
+          <th style="padding:5px 8px;text-align:right;font-size:9px;color:#888;font-weight:700">金額</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -864,22 +869,26 @@ function buildExcelWb(r,ml){
 }
 
 // ── 上傳老闆改好的 Excel → 產生 PDF ──
-async function handleExcelToPDF(fileList){
+async function handleExcelToPDF(input){
+  const fileList=input.files;
   const status=document.getElementById('pdfStatus');
   const fs=[...fileList];
   if(!fs.length)return;
-  status.innerHTML=fs.map(f=>`<div id="ps_${sid(f.name.replace(/\./g,'_'))}">⏳ 讀取 ${f.name}…</div>`).join('');
+  // 清空 input 讓同一檔案可以再次上傳
+  input.value='';
+  status.innerHTML='';
   for(const f of fs){
-    const elId=`ps_${sid(f.name.replace(/\./g,'_'))}`;
-    const el=document.getElementById(elId);
+    const rowEl=document.createElement('div');
+    rowEl.textContent=`⏳ 讀取 ${f.name}…`;
+    status.appendChild(rowEl);
     try{
       const r=await readExcelData(f);
-      if(el)el.textContent=`⏳ ${r.name}：產生 PDF 中…`;
+      rowEl.textContent=`⏳ ${r.name}：產生 PDF 中…`;
       const mo=document.getElementById('payMonth').value||'本月';
       await renderPDF(r,mo);
-      if(el)el.innerHTML=`<span style="color:var(--green)">✅ ${r.name} 的 PDF 已下載</span>`;
+      rowEl.innerHTML=`<span style="color:var(--green)">✅ ${r.name} 的 PDF 已下載</span>`;
     }catch(e){
-      if(el)el.innerHTML=`<span style="color:var(--red)">⚠️ ${f.name}：${e.message}</span>`;
+      rowEl.innerHTML=`<span style="color:var(--red)">⚠️ ${f.name}：${e.message}</span>`;
     }
     await new Promise(x=>setTimeout(x,300));
   }
