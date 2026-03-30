@@ -174,14 +174,16 @@ header{background:var(--ink);color:#fff;padding:15px 28px;display:flex;align-ite
 
   <!-- P1 -->
   <div class="panel active" id="panel1">
+    <!-- 對帳 Excel 上傳 -->
     <div class="upload-zone" id="dropZone">
       <input type="file" id="fileInput" accept=".xlsx,.xls" multiple>
       <div style="font-size:40px">📂</div>
       <h2>拖曳或點擊上傳對帳 Excel</h2>
-      <p>支援一次多份，每位司機一份或多人同份皆可</p>
+      <p>百世、格上、KLOOK 等平台對帳單，支援一次多份</p>
       <div class="ftags"><span class="ftag">.xlsx</span><span class="ftag">.xls</span></div>
     </div>
     <div class="flist" id="flist"></div>
+
     <div id="uerr"></div>
     <div class="btn-row"><button class="btn btn-red" id="nextBtn1" style="display:none" onclick="processFiles()">解析資料 →</button></div>
   </div>
@@ -233,7 +235,7 @@ header{background:var(--ink);color:#fff;padding:15px 28px;display:flex;align-ite
 <script>
 const {jsPDF}=window.jspdf;
 let files=[],driverData={},payrollResult=[];
-const ALL_FEES=['基本費','夜間費','假日費','舉牌費','加點費','空趟費','待時費','偏遠費','座椅費','跨區費','車型費'];
+const ALL_FEES=['基本費','夜間費','假日費','舉牌費','加點費','空趟費','待時費','偏遠費','座椅費','跨區費','車型費','連假費','特派費','其他費','Meet舉牌費'];
 
 const now=new Date();
 document.getElementById('payMonth').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -268,6 +270,11 @@ async function processFiles(){
   document.getElementById('uerr').innerHTML='';driverData={};
   for(const f of files){try{await parseFile(f)}catch(e){document.getElementById('uerr').innerHTML+=`<div class="err-box">⚠️ ${f.name}：${e.message}</div>`;}}
   if(!Object.keys(driverData).length){document.getElementById('uerr').innerHTML='<div class="err-box">⚠️ 找不到有效資料。</div>';return;}
+  // 如有未指定司機的訂單，顯示警告
+  if(driverData['（未指定）']){
+    const cnt=driverData['（未指定）'].sources.reduce((s,src)=>s+src.trips.length,0);
+    document.getElementById('uerr').innerHTML+=`<div class="err-box" style="background:#fef9e7;border-color:#f0d080;color:#7d6608">⚠️ 有 ${cnt} 筆訂單找不到司機名稱，已歸入「（未指定）」，可在步驟二手動修改姓名</div>`;
+  }
   renderDriverArea();goStep(2);
 }
 function parseFile(f){
@@ -279,9 +286,30 @@ function parseFile(f){
         const ws=wb.Sheets[wb.SheetNames[0]];
         const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
         const src=detectSrc(f.name),nff=extractName(f.name);
+
+        // 找標題行（前6行）
         let hRow=-1;
-        for(let i=0;i<Math.min(6,rows.length);i++){if(rows[i]&&rows[i].some(c=>c&&String(c).includes('司機姓名'))){hRow=i;break}}
-        if(hRow>=0)parseStructured(rows,hRow,src,nff);else parseSimple(rows,src,nff);
+        let isKlook=false;
+        for(let i=0;i<Math.min(6,rows.length);i++){
+          if(!rows[i])continue;
+          const rowStrs=rows[i].map(c=>c?String(c).trim():'');
+          // KLOOK 新格式：有「使用時間」+「單價 (TWD)」
+          if(rowStrs.includes('使用時間')&&rowStrs.some(c=>c.includes('單價'))){
+            hRow=i;isKlook=true;break;
+          }
+          // KLOOK 舊格式（對帳單）：有「Klook 訂單編號」或「最終金額」+「司機名稱」
+          if(rowStrs.some(c=>c.includes('Klook'))&&rowStrs.includes('最終金額')){
+            hRow=i;isKlook=true;break;
+          }
+          // 百世/格上格式：有「司機姓名」
+          if(rowStrs.includes('司機姓名')){
+            hRow=i;break;
+          }
+        }
+
+        if(isKlook)parseKlook(rows,hRow);
+        else if(hRow>=0)parseStructured(rows,hRow,src,nff);
+        else parseSimple(rows,src,nff);
         res();
       }catch(err){rej(err)}
     };
@@ -289,22 +317,115 @@ function parseFile(f){
     reader.readAsArrayBuffer(f);
   });
 }
-function detectSrc(fn){if(/百世/i.test(fn))return'百世';if(/格上/i.test(fn))return'格上';if(/全球通/i.test(fn))return'全球通';if(/台灣大/i.test(fn))return'台灣大車隊';return fn.replace(/\.[^.]+$/,'').slice(0,8)}
+
+function parseKlook(rows,hRow){
+  const headers=rows[hRow].map(c=>c?String(c).trim():'');
+  const ci=name=>headers.findIndex(h=>h===name||h.includes(name));
+  // 新格式（後台訂單匯出）：有「使用時間」「單價 (TWD)」「備註」（司機名稱在備註）
+  const isNew=ci('使用時間')>=0&&ci('單價 (TWD)')>=0;
+  if(isNew){
+    const cols={
+      orderId:ci('訂單編號'),useTime:ci('使用時間'),bookTime:ci('订票時間'),
+      member:ci('預訂人姓名'),activity:ci('活動名稱'),unit:ci('單位'),
+      price:ci('單價 (TWD)'),note:ci('備註'),status:ci('訂單狀態'),
+      addSvc:headers.findIndex(h=>h.includes('Additional Services')||h.includes('187533')),
+      from:headers.findIndex(h=>h.includes('526')||h==='187526-From'||h.includes('-From')),
+      to:headers.findIndex(h=>h.includes('527')||h==='187527-To'||h.includes('-To')),
+    };
+    for(let i=hRow+1;i<rows.length;i++){
+      const r=rows[i];if(!r)continue;
+      const status=String(r[cols.status]||'');
+      if(status.includes('取消')||status.includes('Cancel'))continue;
+      const total=parseFloat(r[cols.price]);
+      if(isNaN(total)||total<=0)continue;
+      const orderId=String(r[cols.orderId]||'').trim();
+      // 司機名稱在備註欄（純中文2-4字），沒有就直接跳過
+      const note=String(r[cols.note]||'').trim();
+      const nameM=note.match(/^[\u4e00-\u9fff]{2,4}$/);
+      if(!nameM)continue;  // 沒有司機名稱直接跳過
+      const dn=note;
+      const time=cols.useTime>=0&&r[cols.useTime]?fmtDT(r[cols.useTime]):
+                 cols.bookTime>=0&&r[cols.bookTime]?fmtDT(r[cols.bookTime]):'';
+      // 判斷是否有 Meet & greet（舉牌服務）
+      const addSvcVal=cols.addSvc>=0?String(r[cols.addSvc]||'').trim():'';
+      const hasMeet=addSvcVal.toLowerCase().includes('meet');
+      const fees=hasMeet?{'Meet舉牌費':0}:{};  // 金額暫設0，已含在單價內，讓使用者自行設定是否計入
+      ensureDriver(dn);ensureSrc(dn,'KLOOK');
+      driverData[dn].sources.find(s=>s.label==='KLOOK').trips.push({
+        orderId,time,
+        member:String(r[cols.member]||'').trim(),
+        type:String(r[cols.activity]||'').trim().slice(0,25),
+        car:String(r[cols.unit]||'').trim().slice(0,25),
+        airport:cols.from>=0?String(r[cols.from]||'').trim().slice(0,20):'',
+        city:cols.to>=0?String(r[cols.to]||'').trim().slice(0,20):'',
+        plate:'',fees,rawTotal:total,ov:null,hasMeet
+      });
+    }
+  } else {
+    // 舊格式（對帳單）：最終金額、司機名稱欄
+    const cols={
+      orderId:ci('訂單編號'),klookId:ci('Klook 訂單編號'),
+      driver:ci('司機名稱'),member:ci('聯絡人'),
+      activity:ci('活動名稱'),unit:ci('單位'),
+      time:ci('入帳時間'),bookTime:ci('订票時間'),total:ci('最終金額'),
+    };
+    for(let i=hRow+1;i<rows.length;i++){
+      const r=rows[i];if(!r)continue;
+      const total=parseFloat(r[cols.total]);
+      if(isNaN(total)||total<=0)continue;
+      const orderId=String(r[cols.orderId]||r[cols.klookId]||'').trim();
+      let dn=cols.driver>=0&&r[cols.driver]?String(r[cols.driver]).trim():'';
+      if(!dn||dn==='-')dn='（未指定）';
+      const time=cols.time>=0&&r[cols.time]?fmtDT(r[cols.time]):
+                 cols.bookTime>=0&&r[cols.bookTime]?fmtDT(r[cols.bookTime]):'';
+      ensureDriver(dn);ensureSrc(dn,'KLOOK');
+      driverData[dn].sources.find(s=>s.label==='KLOOK').trips.push({
+        orderId,time,
+        member:cols.member>=0&&r[cols.member]?String(r[cols.member]).trim():'',
+        type:String(r[cols.activity]||'').trim().slice(0,25),
+        car:String(r[cols.unit]||'').trim().slice(0,25),
+        airport:'',city:'',plate:'',fees:{},rawTotal:total,ov:null
+      });
+    }
+  }
+}
+function detectSrc(fn){if(/百世/i.test(fn))return'格上';if(/格上/i.test(fn))return'格上';if(/klook/i.test(fn))return'KLOOK';if(/全球通/i.test(fn))return'全球通';if(/台灣大/i.test(fn))return'台灣大車隊';return fn.replace(/\.[^.]+$/,'').slice(0,8)}
 function extractName(fn){const m=fn.match(/[_\-－]([^\s_\-－\.]{2,4})(?:\.|$)/);if(m)return m[1];const m2=fn.match(/[\u4e00-\u9fff]{2,4}/g);return m2?m2[m2.length-1]:null}
-function ensureDriver(n){if(!driverData[n])driverData[n]={rate:90,sources:[],adjs:[],fe:{},excluded:false};ALL_FEES.forEach(k=>{if(driverData[n].fe[k]===undefined)driverData[n].fe[k]=true})}
-function ensureSrc(n,l){if(!driverData[n].sources.find(s=>s.label===l))driverData[n].sources.push({label:l,trips:[]})}
+function ensureDriver(n){
+  if(!driverData[n])driverData[n]={sources:[],adjs:[],fe:{},excluded:false,srcRates:{}};
+  ALL_FEES.forEach(k=>{if(driverData[n].fe[k]===undefined)driverData[n].fe[k]=true});
+}
+function ensureSrc(n,l){
+  if(!driverData[n].sources.find(s=>s.label===l))driverData[n].sources.push({label:l,trips:[]});
+  // 只有格上和 KLOOK 有獨立抽成設定，其他預設 90% 但不顯示設定欄
+  const RATE_SOURCES=['格上','KLOOK'];
+  if(RATE_SOURCES.includes(l)&&driverData[n].srcRates[l]===undefined)
+    driverData[n].srcRates[l]=l==='KLOOK'?85:90;
+  else if(!RATE_SOURCES.includes(l)&&driverData[n].srcRates[l]===undefined)
+    driverData[n].srcRates[l]=90;
+}
 
 function parseStructured(rows,hRow,srcLabel,nff){
   const headers=rows[hRow].map(c=>c?String(c).trim():'');
   const ci=name=>headers.findIndex(h=>h===name||h.includes(name));
-  const cols={driver:ci('司機姓名'),order:ci('預約單號'),type:ci('服務類型'),time:ci('預約時間'),member:ci('會員姓名'),car:ci('車型'),airport:ci('機場'),city:ci('縣市'),dist:ci('鄉鎮市區'),plate:ci('接送車號'),total:ci('合計')};
-  const feeCols={};ALL_FEES.forEach(k=>{const c=ci(k);if(c>=0)feeCols[k]=c});
+  const cols={
+    driver:ci('司機姓名'),order:ci('預約單號'),type:ci('服務類型'),
+    time:ci('預約時間'),member:ci('會員姓名'),car:ci('車型'),
+    airport:ci('機場'),city:ci('縣市'),dist:ci('鄉鎮市區'),
+    plate:ci('接送車號'),total:ci('合計')
+  };
+  // 費用欄（含百世新增：連假費、特派費、其他費）
+  const ALL_FEE_COLS=[...ALL_FEES,'連假費','特派費','其他費'];
+  const feeCols={};ALL_FEE_COLS.forEach(k=>{const c=ci(k);if(c>=0)feeCols[k]=c});
+  const bonusCol=ci('獎勵金');
   for(let i=hRow+1;i<rows.length;i++){
     const r=rows[i];if(!r)continue;
     let dn=(cols.driver>=0&&r[cols.driver])?String(r[cols.driver]).trim():nff;
     if(!dn?.trim())continue;
     const rawTotal=parseFloat(r[cols.total]);if(isNaN(rawTotal)||rawTotal===0)continue;
-    const fees={};Object.entries(feeCols).forEach(([k,c])=>{const v=parseFloat(r[c])||0;if(v!==0)fees[k]=v});
+    const fees={};
+    Object.entries(feeCols).forEach(([k,c])=>{const v=parseFloat(r[c])||0;if(v!==0)fees[k]=v});
+    if(bonusCol>=0){const v=parseFloat(r[bonusCol])||0;if(v!==0)fees['獎勵金']=v;}
     ensureDriver(dn);ensureSrc(dn,srcLabel);
     driverData[dn].sources.find(s=>s.label===srcLabel).trips.push({
       orderId:cols.order>=0&&r[cols.order]?String(r[cols.order]).trim():'',
@@ -328,13 +449,28 @@ function parseSimple(rows,srcLabel,nff){
 function fmtDT(v){if(!v)return'';const s=String(v);const m=s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})\s*(\d{2}:\d{2})?/);return m?`${m[2]}/${m[3]}${m[4]?' '+m[4]:''}`:s.slice(0,16)}
 function flexDate(v){if(!v)return null;if(v instanceof Date)return`${v.getMonth()+1}/${v.getDate()}`;return fmtDT(String(v))||null}
 function tt(t,fe){if(t.ov!==null)return t.ov;if(!Object.keys(t.fees).length)return t.rawTotal;let s=0;Object.entries(t.fees).forEach(([k,v])=>{if(fe[k]!==false)s+=v});return s||t.rawTotal}
-function dgt(d){return d.sources.reduce((s,src)=>s+src.trips.reduce((ss,t)=>ss+tt(t,d.fe),0),0)}
+function srcNet(src,fe,rate){return Math.round(srcSub(src,fe)*(rate/100))}
+function dgt(d){return d.sources.reduce((s,src)=>{const rate=d.srcRates[src.label]||90;return s+srcNet(src,d.fe,rate)},0)}
 function srcSub(src,fe){return src.trips.reduce((s,t)=>s+tt(t,fe),0)}
 function sid(n){return n.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g,'_')}
 
 // RENDER CONFIG
 function renderDriverArea(){
   const area=document.getElementById('driverArea');area.innerHTML='';
+
+  // ── 全選控制列 ──
+  const names=Object.keys(driverData);
+  const allIncluded=names.every(n=>!driverData[n].excluded);
+  const noneIncluded=names.every(n=>driverData[n].excluded);
+  const ctrl=document.createElement('div');
+  ctrl.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:9px 14px;background:#fff;border:1px solid var(--rule);border-radius:6px;flex-wrap:wrap';
+  ctrl.innerHTML=`
+    <span style="font-size:11px;color:var(--muted);font-weight:700">計算薪資：</span>
+    <button class="btn btn-outline btn-sm" onclick="selectAll(true)" style="padding:4px 12px;font-size:11px">✅ 全選</button>
+    <button class="btn btn-outline btn-sm" onclick="selectAll(false)" style="padding:4px 12px;font-size:11px">⬜ 全不選</button>
+    <span style="font-size:11px;color:var(--muted)">已選 <span id="selectedCount" style="color:var(--green);font-weight:700">${names.filter(n=>!driverData[n].excluded).length}</span> / ${names.length} 位</span>`;
+  area.appendChild(ctrl);
+
   Object.entries(driverData).forEach(([name,d])=>{
     const feeKeys=[...new Set(d.sources.flatMap(s=>s.trips.flatMap(t=>Object.keys(t.fees))))].filter(k=>ALL_FEES.includes(k));
     const gt=dgt(d);
@@ -353,7 +489,6 @@ function renderDriverArea(){
             <span class="toggle-track"></span>
             <span style="font-size:10px;color:${d.excluded?'#aaa':'#4ade80'}">${d.excluded?'已排除':'計入薪資'}</span>
           </label>
-          <div class="rate-wrap"><span>抽成</span><input type="number" min="1" max="100" value="${d.rate}" onchange="driverData['${name}'].rate=parseFloat(this.value)||90"><span>%</span></div>
           <div class="grand-total" id="gt_${sid(name)}">$${gt.toLocaleString()}</div>
         </div>
       </div>
@@ -373,13 +508,18 @@ function renderDriverArea(){
 function renderSrcTables(name,d){
   return d.sources.map(src=>{
     const sub=srcSub(src,d.fe);
+    const rate=d.srcRates[src.label]||90;
+    const meetCount=src.trips.filter(t=>t.hasMeet).length;
     const rows=src.trips.map((t,ti)=>{
       const feeHTML=Object.entries(t.fees||{}).filter(([,v])=>v!==0).map(([k,v])=>`<span class="${d.fe[k]===false?'off':''}">${k} $${v}</span>`).join(' ');
-      return`<tr>
+      const meetBadge=t.hasMeet
+        ?`<span style="display:inline-block;background:${d.fe['Meet舉牌費']===false?'#f0ede7':'#fef3cd'};color:${d.fe['Meet舉牌費']===false?'#aaa':'#b7860b'};border:1px solid ${d.fe['Meet舉牌費']===false?'#d8d3c8':'#f0c040'};border-radius:3px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:4px;text-decoration:${d.fe['Meet舉牌費']===false?'line-through':'none'}">🪧 Meet</span>`
+        :'';
+      return`<tr${t.hasMeet?` style="background:${d.fe['Meet舉牌費']===false?'#fafaf8':'#fffdf0'}"`:''}>
         <td class="mono" style="color:#bbb;font-size:10px">${String(ti+1).padStart(2,'0')}</td>
         <td class="mono blue" style="font-size:10px">${t.orderId||'—'}</td>
         <td style="font-size:10px">${t.time||'—'}</td>
-        <td style="font-size:10px">${t.member||'—'}</td>
+        <td style="font-size:10px">${t.member||'—'}${meetBadge}</td>
         <td style="font-size:10px">${t.type||'—'}</td>
         <td style="font-size:10px;color:#666">${t.city?t.city+' →':''} ${t.airport||''}</td>
         <td><div class="fee-detail">${feeHTML}</div></td>
@@ -388,10 +528,24 @@ function renderSrcTables(name,d){
     }).join('');
     return`<div class="src-block">
       <div class="src-hd">
-        <div style="display:flex;align-items:center;gap:7px"><span class="src-badge">${src.label}</span><span style="font-size:11px;color:var(--muted)">${src.trips.length} 趟</span></div>
-        <span class="src-sub" id="sub_${sid(name)}_${sid(src.label)}">$${sub.toLocaleString()}</span>
+        <div style="display:flex;align-items:center;gap:7px">
+          <span class="src-badge">${src.label}</span>
+          <span style="font-size:11px;color:var(--muted)">${src.trips.length} 趟</span>
+          ${meetCount>0?`<span style="font-size:10px;background:#fef3cd;color:#b7860b;border:1px solid #f0c040;border-radius:3px;padding:1px 7px">🪧 Meet ${meetCount} 筆</span>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          ${['格上','KLOOK'].includes(src.label)?`
+          <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)">
+            司機抽成
+            <input type="number" min="1" max="100" value="${rate}"
+              style="width:52px;border:1px solid var(--rule);border-radius:3px;padding:2px 5px;font-size:11px;font-family:'IBM Plex Mono',monospace;background:var(--paper);outline:none;text-align:center"
+              onchange="driverData['${name}'].srcRates['${src.label}']=parseFloat(this.value)||90;refreshTotals('${name}')">
+            %
+          </div>`:''}
+          <span class="src-sub" id="sub_${sid(name)}_${sid(src.label)}">$${sub.toLocaleString()}</span>
+        </div>
       </div>
-      <button class="toggle-btn" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=(this.nextElementSibling.classList.contains('open')?'▼':'▶')+' 趟次明細 / 修改金額'">▶ 趟次明細 / 修改金額</button>
+      <button class="toggle-btn" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=(this.nextElementSibling.classList.contains('open')?'▼':'▶')+' 趟次明細 / 修改金額（${src.trips.length} 趟${meetCount>0?'，含 '+meetCount+' 筆 Meet':''}）'">▶ 趟次明細 / 修改金額（${src.trips.length} 趟${meetCount>0?`，含 ${meetCount} 筆 Meet`:''}）</button>
       <div class="trip-wrap">
         <table class="trtable">
           <thead><tr><th>#</th><th>訂單編號</th><th>時間</th><th>乘客</th><th>服務類型</th><th>路線</th><th>費用明細</th><th>金額（可改）</th></tr></thead>
@@ -421,16 +575,18 @@ function refreshTotals(name){
   d.sources.forEach(src=>{const el=document.getElementById(`sub_${sid(name)}_${sid(src.label)}`);if(el)el.textContent='$'+srcSub(src,d.fe).toLocaleString();});
   const el=document.getElementById(`gt_${sid(name)}`);if(el)el.textContent='$'+dgt(d).toLocaleString();
 }
+function selectAll(include){
+  Object.keys(driverData).forEach(name=>{driverData[name].excluded=!include;});
+  renderDriverArea();
+}
 function renameDriver(old,nw){if(old===nw||!nw.trim())return;driverData[nw.trim()]=driverData[old];delete driverData[old]}
 function toggleExclude(name,val){
   const d=driverData[name];if(!d)return;
   d.excluded=val;
   const block=document.getElementById(`db_${sid(name)}`);
-  if(block){
-    block.className='driver-block'+(val?' excluded':'');
-    // update badge & toggle label inside header
-    renderDriverArea();
-  }
+  if(block)block.className='driver-block'+(val?' excluded':'');
+  // 更新開關文字與顏色
+  renderDriverArea();
 }
 function addAdj(name){driverData[name].adjs.push({desc:'',amount:0,type:'minus'});renderAdjRows(name)}
 function removeAdj(name,i){driverData[name].adjs.splice(i,1);renderAdjRows(name)}
@@ -453,13 +609,19 @@ function calcAndRender(){
   payrollResult=Object.entries(driverData)
     .filter(([,d])=>!d.excluded)
     .map(([name,d])=>{
-    const sources=d.sources.map(src=>({label:src.label,count:src.trips.length,subtotal:srcSub(src,d.fe),trips:src.trips.map(t=>({...t,finalTotal:tt(t,d.fe)}))}));
-    const tripsTotal=sources.reduce((s,src)=>s+src.subtotal,0);
-    const rate=(parseFloat(d.rate)||90)/100;
-    const baseNet=Math.round(tripsTotal*rate);
-    const plusAdj=d.adjs.filter(a=>a.type==='plus').reduce((s,a)=>s+(a.amount||0),0);
-    const minusAdj=d.adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+(a.amount||0),0);
-    return{name,rate:d.rate,tripsTotal,baseNet,plusAdj,minusAdj,netTotal:baseNet+plusAdj-minusAdj,sources,adjs:d.adjs,fe:d.fe};
+      const sources=d.sources.map(src=>{
+        const rate=d.srcRates[src.label]||90;
+        const subtotal=srcSub(src,d.fe);
+        const netFromSrc=Math.round(subtotal*(rate/100));
+        return{label:src.label,count:src.trips.length,subtotal,rate,netFromSrc,
+               trips:src.trips.map(t=>({...t,finalTotal:tt(t,d.fe)}))};
+      });
+      const tripsTotal=sources.reduce((s,src)=>s+src.subtotal,0);
+      const baseNet=sources.reduce((s,src)=>s+src.netFromSrc,0);
+      const plusAdj=d.adjs.filter(a=>a.type==='plus').reduce((s,a)=>s+(a.amount||0),0);
+      const minusAdj=d.adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+(a.amount||0),0);
+      return{name,tripsTotal,baseNet,plusAdj,minusAdj,
+             netTotal:baseNet+plusAdj-minusAdj,sources,adjs:d.adjs,fe:d.fe,srcRates:d.srcRates};
   });
   renderResults();goStep(3);
 }
@@ -479,22 +641,26 @@ function renderResults(){
     <button class="btn btn-outline btn-sm" onclick="goStep(2)" style="background:rgba(255,255,255,.08);border-color:#444;color:#fff;font-size:11px">← 修改設定</button>`;
 
   document.getElementById('rgrid').innerHTML=payrollResult.map((r,idx)=>{
-    const srcRows=r.sources.map(src=>`<div class="prow"><span class="plabel">${src.label}（${src.count} 趟）</span><span class="pval green">$${src.subtotal.toLocaleString()}</span></div>`).join('');
+    const srcRows=r.sources.map(src=>`
+      <div class="prow">
+        <span class="plabel">${src.label}（${src.count}趟 × ${src.rate}%）</span>
+        <span class="pval green">$${src.netFromSrc.toLocaleString()}</span>
+      </div>`).join('');
     const adjRows=r.adjs.map(a=>`<div class="prow"><span class="plabel">${a.type==='plus'?'＋':'－'} ${a.desc||'調整項'}</span><span class="pval ${a.type==='plus'?'green':'red'}">${a.type==='plus'?'+':'-'}$${(a.amount||0).toLocaleString()}</span></div>`).join('');
     const detailRows=r.sources.map(src=>`
-      <tr class="sh"><td colspan="5">${src.label}</td></tr>
+      <tr class="sh"><td colspan="5">${src.label}（司機抽成${src.rate}%）</td></tr>
       ${src.trips.map((t,i)=>`<tr><td class="mono" style="color:#bbb">${String(i+1).padStart(2,'0')}</td><td class="mono blue" style="font-size:10px">${t.orderId||'—'}</td><td>${t.time||'—'}</td><td>${t.member||'—'} ${t.type?'｜'+t.type:''}</td><td class="mono green" style="text-align:right">$${t.finalTotal.toLocaleString()}</td></tr>`).join('')}`).join('');
+    const rateDesc=r.sources.map(s=>`${s.label}${s.rate}%`).join('、');
     return`<div class="pcard">
-      <div class="pc-hd"><div><div class="pc-name">${r.name}</div><div class="pc-meta">${ml} | 抽成 ${r.rate}%</div></div></div>
+      <div class="pc-hd"><div><div class="pc-name">${r.name}</div><div class="pc-meta">${ml} | ${rateDesc}</div></div></div>
       <div class="pc-body">
         ${srcRows}
-        <div class="prow" style="font-weight:700;margin-top:4px"><span class="plabel">趟次總額</span><span class="pval">$${r.tripsTotal.toLocaleString()}</span></div>
-        <div class="prow"><span class="plabel">× 抽成（${r.rate}%）</span><span class="pval blue">$${r.baseNet.toLocaleString()}</span></div>
+        <div class="prow" style="font-weight:700;margin-top:4px;border-top:1px solid var(--s2);padding-top:6px"><span class="plabel">各來源司機抽成合計</span><span class="pval">$${r.baseNet.toLocaleString()}</span></div>
         ${adjRows}
         <button class="toggle-btn" style="margin-top:8px" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=(this.nextElementSibling.classList.contains('open')?'▼':'▶')+' 趟次明細（${r.sources.reduce((s,src)=>s+src.count,0)} 趟）'">▶ 趟次明細（${r.sources.reduce((s,src)=>s+src.count,0)} 趟）</button>
         <div class="detail-wrap"><table class="dtt"><thead><tr><th>#</th><th>訂單編號</th><th>時間</th><th>乘客 ｜ 類型</th><th style="text-align:right">金額</th></tr></thead><tbody>${detailRows}</tbody></table></div>
       </div>
-      <div class="pc-total"><div><div class="pc-total-label">本月應領薪資</div><div style="font-size:9px;color:#666;margin-top:1px">${r.sources.reduce((s,src)=>s+src.count,0)} 趟 × ${r.rate}%${r.plusAdj>0?' + 加項':''}${r.minusAdj>0?' − 減項':''}</div></div>
+      <div class="pc-total"><div><div class="pc-total-label">本月應領薪資</div><div style="font-size:9px;color:#666;margin-top:1px">${rateDesc}${r.plusAdj>0?' + 加項':''}${r.minusAdj>0?' − 減項':''}</div></div>
       <div class="pc-amount">$${r.netTotal.toLocaleString()}</div></div>
       <div class="pc-actions">
         <button class="btn btn-orange btn-sm" onclick="dlExcel(${idx})">📊 下載 Excel</button>
@@ -567,16 +733,21 @@ function buildPDFHTML(r){
       <div style="text-align:right">
         <div style="font-size:11px;color:#888;margin-bottom:6px">本月應領薪資</div>
         <div style="font-size:38px;font-weight:900;color:#f1c40f;font-family:'IBM Plex Mono',monospace;line-height:1">$${r.netTotal.toLocaleString()}</div>
-        <div style="font-size:10px;color:#666;margin-top:6px">${totalTrips} 趟 × ${r.rate}%${r.plusAdj>0?' + 加項':''}${r.minusAdj>0?' − 減項':''}</div>
+        <div style="font-size:10px;color:#666;margin-top:6px">${totalTrips} 趟${r.plusAdj>0?' + 加項':''}${r.minusAdj>0?' − 減項':''}</div>
       </div>
     </div>
 
     <!-- INFO PILLS -->
     <div style="display:flex;gap:10px;margin-top:22px;flex-wrap:wrap">
-      ${[['📅 結算月份',ml],['🚗 總趟數',totalTrips+' 趟'],['📊 抽成比例',r.rate+'%']].map(([l,v])=>`
+      ${[['📅 結算月份',ml],['🚗 總趟數',totalTrips+' 趟']].map(([l,v])=>`
         <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:8px 16px">
           <div style="font-size:9px;color:#888;margin-bottom:2px">${l}</div>
           <div style="font-size:14px;font-weight:700">${v}</div>
+        </div>`).join('')}
+      ${r.sources.map(src=>`
+        <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:8px 16px">
+          <div style="font-size:9px;color:#888;margin-bottom:2px">📊 ${src.label} 司機抽成</div>
+          <div style="font-size:14px;font-weight:700">${src.rate}%</div>
         </div>`).join('')}
       ${disabledFees.length?`<div style="background:rgba(230,126,34,.15);border:1px solid rgba(230,126,34,.3);border-radius:6px;padding:8px 16px"><div style="font-size:9px;color:#e67e22;margin-bottom:2px">⚠️ 未計入費用</div><div style="font-size:12px;font-weight:700;color:#e67e22">${disabledFees.join('、')}</div></div>`:''}
     </div>
@@ -586,9 +757,12 @@ function buildPDFHTML(r){
   <div style="margin:24px 48px 0;border:1px solid #e0ddd6;border-radius:8px;overflow:hidden">
     <div style="background:#f8f7f4;padding:10px 16px;font-size:10px;font-weight:700;color:#888;letter-spacing:.6px">薪資計算摘要</div>
     <div style="padding:4px 16px 8px">
-      ${r.sources.map(src=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ede8;font-size:12px"><span style="color:#555">${src.label}（${src.count} 趟）</span><span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:#1e8449">$${src.subtotal.toLocaleString()}</span></div>`).join('')}
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e0ddd6;font-size:13px;font-weight:700"><span>趟次總額</span><span style="font-family:'IBM Plex Mono',monospace">$${r.tripsTotal.toLocaleString()}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ede8;font-size:12px;color:#555"><span>× 抽成比例（${r.rate}%）</span><span style="font-family:'IBM Plex Mono',monospace;color:#1a5276">$${r.baseNet.toLocaleString()}</span></div>
+      ${r.sources.map(src=>`
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ede8;font-size:12px">
+          <span style="color:#555">${src.label}（${src.count}趟）× ${src.rate}%</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:#1e8449">$${src.netFromSrc.toLocaleString()}</span>
+        </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e0ddd6;font-size:13px;font-weight:700"><span>各來源司機抽成合計</span><span style="font-family:'IBM Plex Mono',monospace">$${r.baseNet.toLocaleString()}</span></div>
       ${adjRows}
     </div>
     <div style="background:linear-gradient(135deg,#111318,#1a1d27);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
@@ -673,8 +847,11 @@ function buildExcelWb(r,ml){
 
   // Sheet 2: 薪資計算
   const calcRows=[['司機姓名',r.name],['結算月份',ml],[''],['項目','金額','說明']];
-  r.sources.forEach(src=>calcRows.push([src.label+'趟次合計',src.subtotal,src.count+'趟']));
-  calcRows.push(['趟次總額',r.tripsTotal,''],['抽成比例',r.rate+'%',''],['稅前薪資',r.baseNet,'趟次總額×抽成']);
+  r.sources.forEach(src=>{
+    calcRows.push([`${src.label}趟次合計`,src.subtotal,`${src.count}趟`]);
+    calcRows.push([`${src.label}司機抽成（${src.rate}%）`,src.netFromSrc,`$${src.subtotal.toLocaleString()} × ${src.rate}%`]);
+  });
+  calcRows.push(['各來源司機抽成合計',r.baseNet,'']);
   if(r.adjs.length){calcRows.push(['']);r.adjs.forEach(a=>calcRows.push([a.desc||'調整項',a.type==='plus'?a.amount:-a.amount,a.type==='plus'?'加項':'減項']));}
   calcRows.push([''],['本月應領薪資',r.netTotal,'']);
   if(disabledFees.length)calcRows.push(['','','⚠️ 未計入：'+disabledFees.join('、')]);
