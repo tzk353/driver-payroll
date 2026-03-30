@@ -693,7 +693,7 @@ function buildPDFHTML(r,ml){
         .map(([k,v])=>k+'$'+v).join(' ');
       const meetTag=t.hasMeet?' [舉牌]':'';
       const bg=i%2===0?'#ffffff':'#f7f6f4';
-      return '<div style="background:'+bg+';border-bottom:1px solid #eee;padding:5px 0">'
+      return '<div data-row="1" style="background:'+bg+';border-bottom:1px solid #eee;padding:5px 0">'
         +'<table style="width:722px;border-collapse:collapse;table-layout:fixed"><tr>'
         +'<td style="width:100px;padding:2px 8px;vertical-align:top;overflow:hidden">'
           +'<div style="font-size:10px;color:#aaa">'+String(i+1).padStart(2,'0')+'</div>'
@@ -701,8 +701,9 @@ function buildPDFHTML(r,ml){
           +'<div style="font-size:9px;color:#aaa">'+cut(t.time,14)+'</div>'
         +'</td>'
         +'<td style="width:135px;padding:2px 8px;vertical-align:top;overflow:hidden">'
-          +'<div style="font-size:11px">'+cut(t.member,10)+meetTag+'</div>'
-          +'<div style="font-size:9px;color:#888">'+cut(t.type,12)+'</div>'
+          +'<div style="font-size:11px">'+cut(t.member,12)+'</div>'
+          +(t.hasMeet?'<div style="font-size:9px;background:#fef3cd;color:#7d6608;border:1px solid #e0c040;border-radius:2px;padding:0 3px;display:inline-block;margin-top:1px">舉牌</div>':'')
+          +'<div style="font-size:9px;color:#888;margin-top:1px">'+cut(t.type,14)+'</div>'
         +'</td>'
         +'<td style="width:155px;padding:2px 8px;vertical-align:middle;font-size:10px;color:#555">'+cut((t.city?t.city+' → ':'')+t.airport,18)+'</td>'
         +'<td style="width:150px;padding:2px 8px;vertical-align:middle;font-size:10px;color:#666">'+cut(feeStr||'—',18)+'</td>'
@@ -794,15 +795,39 @@ async function dlPDF(idx){
   const canvas=await html2canvas(tpl,{scale:2,useCORS:true,backgroundColor:'#ffffff',width:794,logging:false});
   const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
   const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
-  const pagePixH=Math.floor(canvas.width*(ph/pw));
+  const scale=canvas.width/794; // canvas px per CSS px
+  const pagePixH=Math.floor(ph/pw*canvas.width);
+
+  // 找每一行的底部位置（px），在行間切頁
+  const rowEls=tpl.querySelectorAll('[data-row]');
+  const rowBottoms=[...rowEls].map(el=>{
+    const rect=el.getBoundingClientRect();
+    const tplRect=tpl.getBoundingClientRect();
+    return Math.round((rect.bottom-tplRect.top)*scale);
+  }).filter(v=>v>0).sort((a,b)=>a-b);
+
+  // 找最佳切頁點：在 pagePixH 以內最後一個行底部
+  function findCutPoint(startY){
+    const limit=startY+pagePixH;
+    let cut=limit;
+    // 找在 limit 前最近的行底部，留 20px 緩衝
+    for(let i=rowBottoms.length-1;i>=0;i--){
+      const rb=rowBottoms[i];
+      if(rb<=limit-20&&rb>startY+20){cut=rb;break;}
+    }
+    return Math.min(cut,canvas.height);
+  }
+
   let y=0;
   while(y<canvas.height){
-    const sliceH=Math.min(pagePixH,canvas.height-y);
+    const cutY=rowBottoms.length>0?findCutPoint(y):Math.min(y+pagePixH,canvas.height);
+    const sliceH=cutY-y;
     const sc=document.createElement('canvas');sc.width=canvas.width;sc.height=sliceH;
     sc.getContext('2d').drawImage(canvas,0,-y);
     if(y>0)pdf.addPage();
     pdf.addImage(sc.toDataURL('image/png'),'PNG',0,0,pw,sliceH*(pw/canvas.width));
-    y+=sliceH;
+    y=cutY;
+    if(y>=canvas.height)break;
   }
   pdf.save('薪資單_'+r.name+'_'+mo+'.pdf');
   tpl.innerHTML='';
