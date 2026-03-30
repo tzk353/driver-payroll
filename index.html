@@ -802,34 +802,223 @@ function dlExcel(idx){
 }
 function dlAllExcel(){payrollResult.forEach((_,i)=>dlExcel(i));}
 
-// ── 下載 PDF ──
+// ── 下載 PDF（jsPDF 直接繪製，不用 html2canvas）──
 async function dlPDF(idx){
   const r=payrollResult[idx];
   const mo=document.getElementById('payMonth').value||'本月';
-  const tpl=document.getElementById('pdfTpl');
-  tpl.innerHTML=buildPDFHTML(r);
-  await document.fonts.ready;
-  await new Promise(x=>setTimeout(x,400));
-  const canvas=await html2canvas(tpl,{scale:2,useCORS:true,backgroundColor:'#ffffff',width:794});
+  const ml=getML();
   const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-  const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
-  const pageH=ph/pw*canvas.width;let y=0;
-  while(y<canvas.height){
-    const sliceH=Math.min(pageH,canvas.height-y);
-    const sc=document.createElement('canvas');sc.width=canvas.width;sc.height=sliceH;
-    sc.getContext('2d').drawImage(canvas,0,-y);
-    if(y>0)pdf.addPage();
-    pdf.addImage(sc.toDataURL('image/png'),'PNG',0,0,pw,sliceH*(pw/canvas.width));
-    y+=sliceH;
+  const PW=210,PH=297,ML=14,MR=14,MT=14;
+  const CW=PW-ML-MR; // 內容寬 182mm
+  let y=MT;
+
+  // ── 載入中文字型（用 Base64 內嵌）──
+  // jsPDF 預設不支援中文，改用 canvas 渲染每一行文字再貼圖
+  // 建立離屏 canvas 渲染文字
+  const fc=document.createElement('canvas');
+  fc.width=Math.round(CW/0.264583)*2; // 182mm → px @2x
+  const fcw=fc.width;
+  const fctx=fc.getContext('2d');
+
+  function mm2px(mm){return Math.round(mm/0.264583*2);}
+  function px2mm(px){return px*0.264583/2;}
+
+  // 繪製一段文字到 canvas，回傳圖片 dataURL 和實際高度(mm)
+  function renderTextBlock(lines,opts){
+    // lines: [{text, size, bold, color, align, x_mm, maxW_mm}]
+    const scale=2;
+    const blockH_px=lines.reduce((s,l)=>{
+      const lh=(l.lineHeight||1.5);
+      return s+Math.ceil(l.size*scale*lh);
+    },0)+4;
+    const tc=document.createElement('canvas');
+    tc.width=Math.round(CW/0.264583)*scale;
+    tc.height=blockH_px;
+    const ctx=tc.getContext('2d');
+    ctx.clearRect(0,0,tc.width,tc.height);
+    let cy=0;
+    lines.forEach(l=>{
+      const fs=Math.round(l.size*scale);
+      ctx.font=`${l.bold?'bold ':''} ${fs}px 'Noto Sans TC', sans-serif`;
+      ctx.fillStyle=l.color||'#111318';
+      ctx.textBaseline='top';
+      const maxW=l.maxW_mm?mm2px(l.maxW_mm):tc.width;
+      const x=l.x_mm?mm2px(l.x_mm):0;
+      // 截斷超長文字
+      let txt=String(l.text||'');
+      while(ctx.measureText(txt).width>maxW-4&&txt.length>1)txt=txt.slice(0,-1);
+      if(String(l.text||'').length>txt.length)txt+='…';
+      if(l.align==='right'){
+        const tw=ctx.measureText(txt).width;
+        ctx.fillText(txt,tc.width-4-tw,cy+2);
+      } else {
+        ctx.fillText(txt,x+2,cy+2);
+      }
+      cy+=Math.ceil(fs*(l.lineHeight||1.5));
+    });
+    return{dataUrl:tc.toDataURL('image/png'),h_mm:px2mm(blockH_px),w_mm:CW};
   }
+
+  function addPageIfNeeded(neededMm){
+    if(y+neededMm>PH-10){pdf.addPage();y=MT;}
+  }
+
+  function addRect(x,yw,h,fill,stroke){
+    if(fill){pdf.setFillColor(...hexToRgb(fill));pdf.rect(x,yw,CW,h,'F');}
+    if(stroke){pdf.setDrawColor(...hexToRgb(stroke));pdf.rect(x,yw,CW,h,'S');}
+  }
+  function hexToRgb(hex){
+    const h=hex.replace('#','');
+    return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];
+  }
+  function drawText(text,x,yw,size,opts={}){
+    const tc=document.createElement('canvas');
+    const scale=3;
+    const fs=Math.round(size*scale*3.7795); // pt to px
+    tc.height=Math.ceil(fs*1.6);
+    tc.width=opts.maxW?mm2px(opts.maxW)*scale:fcw;
+    const ctx=tc.getContext('2d');
+    ctx.clearRect(0,0,tc.width,tc.height);
+    ctx.font=`${opts.bold?'bold ':''} ${fs}px 'Noto Sans TC',sans-serif`;
+    ctx.fillStyle=opts.color||'#111318';
+    ctx.textBaseline='top';
+    let txt=String(text||'');
+    const maxPx=tc.width-6;
+    while(ctx.measureText(txt).width>maxPx&&txt.length>1)txt=txt.slice(0,-1);
+    if(String(text||'').length>txt.length)txt+='…';
+    if(opts.align==='right'){
+      const tw=ctx.measureText(txt).width;
+      ctx.fillText(txt,tc.width-3-tw,2);
+    }else{ctx.fillText(txt,3,2);}
+    const h_mm=px2mm(tc.height)/scale;
+    const w_mm=opts.maxW||CW;
+    pdf.addImage(tc.toDataURL('image/png'),'PNG',x,yw,w_mm,h_mm);
+    return h_mm;
+  }
+
+  const totalTrips=r.sources.reduce((s,src)=>s+src.count,0);
+
+  // ═══ 頂部深色橫幅 ═══
+  const bannerH=42;
+  pdf.setFillColor(17,19,24);
+  pdf.rect(0,0,PW,bannerH,'F');
+  pdf.setFillColor(192,57,43);
+  pdf.rect(0,bannerH-1,PW,1,'F');
+
+  // 司機名稱
+  drawText(r.name,ML,6,18,{bold:true,color:'#ffffff'});
+  drawText(ml+' 薪資單',ML,18,9,{color:'#aaaaaa'});
+  // 應領金額
+  drawText('本月應領薪資',PW-ML-50,6,8,{color:'#888888',align:'right',maxW:50});
+  drawText('$'+r.netTotal.toLocaleString(),PW-ML-60,12,16,{bold:true,color:'#f1c40f',align:'right',maxW:60});
+
+  y=bannerH+6;
+
+  // ═══ 資訊欄 ═══
+  const infoW=CW/3;
+  const infos=[[`${totalTrips} 趟`,'總趟數'],[ml,'結算月份'],...r.sources.map(s=>[s.rate+'%',s.label+' 司機抽成'])];
+  infos.forEach((item,i)=>{
+    const ix=ML+i*infoW;
+    drawText(item[1],ix,y,6.5,{color:'#888888',maxW:infoW});
+    drawText(item[0],ix,y+4.5,11,{bold:true,color:'#111318',maxW:infoW});
+  });
+  y+=18;
+
+  // ═══ 薪資摘要 ═══
+  pdf.setFillColor(248,247,244);pdf.rect(ML,y,CW,6,'F');
+  drawText('薪資計算摘要',ML+2,y+1,7,{bold:true,color:'#888888'});
+  y+=7;
+  r.sources.forEach(src=>{
+    drawText(`${src.label}（${src.count}趟）× ${src.rate}%`,ML+2,y+1,8,{color:'#555555',maxW:CW*0.7});
+    drawText('$'+src.netFromSrc.toLocaleString(),ML,y+1,8,{bold:true,color:'#1e8449',align:'right',maxW:CW-2});
+    y+=6;
+    pdf.setDrawColor(240,237,232);pdf.line(ML,y,ML+CW,y);
+  });
+  drawText('各來源司機抽成合計',ML+2,y+1,8,{bold:true,maxW:CW*0.7});
+  drawText('$'+r.baseNet.toLocaleString(),ML,y+1,8,{bold:true,align:'right',maxW:CW-2});
+  y+=7;
+  r.adjs.forEach(a=>{
+    drawText((a.type==='plus'?'＋':'－')+' '+(a.desc||'調整項'),ML+2,y+1,8,{color:'#555555',maxW:CW*0.7});
+    drawText((a.type==='plus'?'+':'-')+'$'+(a.amount||0).toLocaleString(),ML,y+1,8,{bold:true,color:a.type==='plus'?'#1e8449':'#c0392b',align:'right',maxW:CW-2});
+    y+=6;
+  });
+  // 應領薪資深色列
+  pdf.setFillColor(17,19,24);pdf.rect(ML,y,CW,9,'F');
+  drawText('本月應領薪資',ML+2,y+1,9,{bold:true,color:'#ffffff',maxW:CW*0.6});
+  drawText('$'+r.netTotal.toLocaleString(),ML,y+1,11,{bold:true,color:'#f1c40f',align:'right',maxW:CW-2});
+  y+=13;
+
+  // ═══ 趟次明細 ═══
+  pdf.setDrawColor(17,19,24);pdf.line(ML,y,ML+CW,y);
+  drawText('趟次明細',ML,y+1,8,{bold:true,color:'#888888'});
+  y+=7;
+
+  // 欄寬 (mm)
+  const C=[28,38,40,48,28]; // #/訂單/時間, 乘客/類型, 路線, 費用明細, 金額
+  const CX=[ML, ML+C[0], ML+C[0]+C[1], ML+C[0]+C[1]+C[2], ML+C[0]+C[1]+C[2]+C[3]];
+
+  r.sources.forEach(src=>{
+    addPageIfNeeded(14);
+    // 來源標題
+    pdf.setFillColor(26,29,39);pdf.rect(ML,y,CW,6,'F');
+    drawText(src.label+' — '+src.count+' 趟',ML+2,y+1,8,{bold:true,color:'#ffffff',maxW:CW-4});
+    y+=7;
+    // 欄標題
+    pdf.setFillColor(240,237,232);pdf.rect(ML,y,CW,5,'F');
+    ['#／訂單','乘客／類型','路線','費用明細','金額'].forEach((h,ci)=>{
+      drawText(h,CX[ci]+1,y+0.5,6.5,{color:'#888888',maxW:C[ci]-2,align:ci===4?'right':undefined});
+    });
+    y+=6;
+
+    src.trips.forEach((t,ti)=>{
+      addPageIfNeeded(10);
+      const bg=ti%2===0?[255,255,255]:[249,248,246];
+      pdf.setFillColor(...bg);pdf.rect(ML,y,CW,9,'F');
+
+      const feeStr=Object.entries(t.fees||{}).filter(([k,v])=>v!==0&&k!=='Meet舉牌費'&&r.fe[k]!==false).map(([k,v])=>`${k}$${v}`).join(' ');
+      const meetMark=t.hasMeet?' 🪧':'';
+
+      // 欄 0：序號+訂單+時間
+      drawText(String(ti+1).padStart(2,'0'),CX[0]+1,y+0.5,7.5,{color:'#bbbbbb',maxW:C[0]-2});
+      drawText(t.orderId||'',CX[0]+1,y+3.5,7,{color:'#1a5276',maxW:C[0]-2});
+      drawText(t.time||'',CX[0]+1,y+6.5,6.5,{color:'#aaaaaa',maxW:C[0]-2});
+      // 欄 1：乘客
+      drawText((t.member||'—')+meetMark,CX[1]+1,y+1,8.5,{bold:false,maxW:C[1]-2});
+      drawText(t.type||'',CX[1]+1,y+5.5,7,{color:'#888888',maxW:C[1]-2});
+      // 欄 2：路線
+      drawText((t.city?t.city+' →':'')+' '+(t.airport||''),CX[2]+1,y+3,8,{color:'#666666',maxW:C[2]-2});
+      // 欄 3：費用
+      drawText(feeStr||'—',CX[3]+1,y+3,7.5,{color:'#555555',maxW:C[3]-2});
+      // 欄 4：金額
+      drawText('$'+t.finalTotal.toLocaleString(),CX[4],y+3,9,{bold:true,color:'#1e8449',align:'right',maxW:C[4]-2});
+
+      pdf.setDrawColor(245,243,238);pdf.line(ML,y+9,ML+CW,y+9);
+      y+=10;
+    });
+    y+=4;
+  });
+
+  // ═══ 頁尾 ═══
+  addPageIfNeeded(10);
+  pdf.setDrawColor(224,221,214);pdf.line(ML,y,ML+CW,y);
+  drawText('此薪資單由系統自動產生　｜　如有疑問請聯繫公司管理人員　｜　列印日期：'+new Date().toLocaleDateString('zh-TW'),ML,y+2,7,{color:'#bbbbbb'});
+
   pdf.save(`薪資單_${r.name}_${mo}.pdf`);
-  tpl.innerHTML='';
 }
 async function dlAllPDF(){
   for(let i=0;i<payrollResult.length;i++){
     await dlPDF(i);
-    await new Promise(x=>setTimeout(x,400));
+    await new Promise(x=>setTimeout(x,500));
   }
+}
+async function renderPDF(r,mo){
+  // 上傳 Excel 後產生 PDF，使用相同邏輯
+  const savedResult=payrollResult;
+  // 暫時借用 payrollResult slot
+  const fakeIdx=payrollResult.length;
+  payrollResult.push(r);
+  await dlPDF(fakeIdx);
+  payrollResult=savedResult;
 }
 
 function buildExcelWb(r,ml){
