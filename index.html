@@ -511,7 +511,9 @@ function renderSrcTables(name,d){
     const rate=d.srcRates[src.label]||90;
     const meetCount=src.trips.filter(t=>t.hasMeet).length;
     const rows=src.trips.map((t,ti)=>{
-      const feeHTML=Object.entries(t.fees||{}).filter(([,v])=>v!==0).map(([k,v])=>`<span class="${d.fe[k]===false?'off':''}">${k} $${v}</span>`).join(' ');
+      const feeHTML=Object.entries(t.fees||{})
+        .filter(([k,v])=>v!==0&&k!=='Meet舉牌費')  // Meet舉牌費用 hasMeet 另外顯示
+        .map(([k,v])=>`<span class="${d.fe[k]===false?'off':''}">${k} $${v}</span>`).join(' ');
       const meetBadge=t.hasMeet
         ?`<span style="display:inline-block;background:${d.fe['Meet舉牌費']===false?'#f0ede7':'#fef3cd'};color:${d.fe['Meet舉牌費']===false?'#aaa':'#b7860b'};border:1px solid ${d.fe['Meet舉牌費']===false?'#d8d3c8':'#f0c040'};border-radius:3px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:4px;text-decoration:${d.fe['Meet舉牌費']===false?'line-through':'none'}">🪧 Meet</span>`
         :'';
@@ -828,21 +830,22 @@ function buildExcelWb(r,ml){
   const disabledFees=Object.entries(r.fe||{}).filter(([,v])=>!v).map(([k])=>k);
 
   // Sheet 1: 趟次明細
-  const header=['#','訂單編號','預約時間','乘客姓名','服務類型','路線','車型','基本費','夜間費','假日費','舉牌費','加點費','空趟費','待時費','偏遠費','座椅費','跨區費','車型費','計入金額','備註'];
+  const header=['#','訂單編號','預約時間','乘客姓名','服務類型','路線','車型','基本費','夜間費','假日費','舉牌費','加點費','空趟費','待時費','偏遠費','座椅費','跨區費','車型費','Meet舉牌','計入金額','備註'];
   const tripRows=[];
   r.sources.forEach(src=>{
     tripRows.push([src.label]);
     src.trips.forEach((t,i)=>{
       const fv={};Object.entries(t.fees||{}).forEach(([k,v])=>fv[k]=v);
+      const meetMark=t.hasMeet?'🪧 Meet':'';
       const note=t.ov!==null?'*手動調整':(disabledFees.length?'未計：'+Object.keys(t.fees||{}).filter(k=>!r.fe[k]).join('/'):'');
       tripRows.push([i+1,t.orderId||'',t.time||'',t.member||'',t.type||'',(t.city?t.city+'→':'')+' '+(t.airport||''),t.car||'',
         fv['基本費']||0,fv['夜間費']||0,fv['假日費']||0,fv['舉牌費']||0,fv['加點費']||0,
         fv['空趟費']||0,fv['待時費']||0,fv['偏遠費']||0,fv['座椅費']||0,fv['跨區費']||0,fv['車型費']||0,
-        t.finalTotal,note]);
+        meetMark,t.finalTotal,note]);
     });
   });
   const ws1=XLSX.utils.aoa_to_sheet([header,...tripRows]);
-  ws1['!cols']=[{wch:4},{wch:16},{wch:16},{wch:10},{wch:12},{wch:22},{wch:10},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:10},{wch:20}];
+  ws1['!cols']=[{wch:4},{wch:16},{wch:16},{wch:10},{wch:12},{wch:22},{wch:10},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:7},{wch:8},{wch:10},{wch:20}];
   XLSX.utils.book_append_sheet(wb,ws1,'趟次明細');
 
   // Sheet 2: 薪資計算
