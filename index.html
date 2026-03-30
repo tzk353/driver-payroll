@@ -210,7 +210,7 @@ header{background:var(--ink);color:#fff;padding:15px 28px;display:flex;align-ite
       </div>
     </div>
 
-    <!-- ② 老闆改完回傳後，上傳產生 PDF -->
+    <!-- ② 上傳老闆改好的 Excel → 產生 PDF -->
     <div class="card" style="margin-bottom:22px">
       <div class="card-hd">② 上傳老闆確認後的 Excel，產生 PDF 傳給司機</div>
       <div style="padding:12px 18px">
@@ -219,7 +219,7 @@ header{background:var(--ink);color:#fff;padding:15px 28px;display:flex;align-ite
             📂 選擇 Excel（可一次多選）
             <input type="file" accept=".xlsx" multiple style="display:none" onchange="handleExcelToPDF(this.files)">
           </label>
-          <span style="font-size:11px;color:var(--muted)">讀取 Excel 最終內容 → 直接產生 PDF</span>
+          <button class="btn btn-green" onclick="dlAllPDF()" style="padding:9px 16px">📄 全部下載 PDF（不需老闆確認）</button>
         </div>
         <div id="pdfStatus" style="margin-top:10px;font-size:12px;min-height:20px;line-height:2"></div>
       </div>
@@ -666,6 +666,7 @@ function renderResults(){
       <div class="pc-amount">$${r.netTotal.toLocaleString()}</div></div>
       <div class="pc-actions">
         <button class="btn btn-orange btn-sm" onclick="dlExcel(${idx})">📊 下載 Excel</button>
+        <button class="btn btn-blue btn-sm" onclick="dlPDF(${idx})">📄 下載 PDF</button>
         <span style="font-size:10px;color:var(--muted)">${r.name}｜${ml}</span>
       </div>
     </div>`;
