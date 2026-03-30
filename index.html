@@ -680,33 +680,33 @@ function buildPDFHTML(r,ml){
   if(!ml)ml=getML();
   const totalTrips=r.sources.reduce((s,src)=>s+src.count,0);
 
+  // 截斷文字，避免溢出欄位
+  function cut(str,len){
+    const s=String(str||'');
+    return s.length>len?s.slice(0,len)+'…':s;
+  }
+
   const tripSections=r.sources.map(src=>{
     const rows=src.trips.map((t,i)=>{
       const feeStr=Object.entries(t.fees||{})
         .filter(([k,v])=>v!==0&&k!=='Meet舉牌費'&&r.fe[k]!==false)
-        .map(([k,v])=>k+' $'+v).join('  ');
-      const meetTag=t.hasMeet?'<span style="background:#fef3cd;color:#7d6608;border:1px solid #e0c040;border-radius:2px;padding:0 3px;font-size:9px;margin-left:3px">舉牌</span>':'';
+        .map(([k,v])=>k+'$'+v).join(' ');
+      const meetTag=t.hasMeet?' [舉牌]':'';
       const bg=i%2===0?'#ffffff':'#f7f6f4';
-      return '<div style="background:'+bg+';border-bottom:1px solid #eeebe6;padding:6px 0;overflow:hidden">'
-        +'<table style="width:100%;border-collapse:collapse"><tr>'
-        +'<td style="width:100px;padding:0 8px;vertical-align:top">'
+      return '<div style="background:'+bg+';border-bottom:1px solid #eee;padding:5px 0">'
+        +'<table style="width:722px;border-collapse:collapse;table-layout:fixed"><tr>'
+        +'<td style="width:100px;padding:2px 8px;vertical-align:top;overflow:hidden">'
           +'<div style="font-size:10px;color:#aaa">'+String(i+1).padStart(2,'0')+'</div>'
-          +'<div style="font-size:9px;color:#2471a3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px">'+(t.orderId||'')+'</div>'
-          +'<div style="font-size:9px;color:#aaa;white-space:nowrap">'+(t.time||'')+'</div>'
+          +'<div style="font-size:9px;color:#2471a3">'+cut(t.orderId,12)+'</div>'
+          +'<div style="font-size:9px;color:#aaa">'+cut(t.time,14)+'</div>'
         +'</td>'
-        +'<td style="width:130px;padding:0 8px;vertical-align:top">'
-          +'<div style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">'+(t.member||'—')+meetTag+'</div>'
-          +'<div style="font-size:9px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">'+(t.type||'')+'</div>'
+        +'<td style="width:135px;padding:2px 8px;vertical-align:top;overflow:hidden">'
+          +'<div style="font-size:11px">'+cut(t.member,10)+meetTag+'</div>'
+          +'<div style="font-size:9px;color:#888">'+cut(t.type,12)+'</div>'
         +'</td>'
-        +'<td style="width:160px;padding:0 8px;vertical-align:middle;font-size:10px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">'
-          +((t.city?t.city+' → ':'')+(t.airport||''))
-        +'</td>'
-        +'<td style="width:160px;padding:0 8px;vertical-align:middle;font-size:10px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">'
-          +(feeStr||'—')
-        +'</td>'
-        +'<td style="padding:0 10px;vertical-align:middle;text-align:right;font-size:13px;color:#1e8449;white-space:nowrap">'
-          +'$'+t.finalTotal.toLocaleString()
-        +'</td>'
+        +'<td style="width:155px;padding:2px 8px;vertical-align:middle;font-size:10px;color:#555">'+cut((t.city?t.city+' → ':'')+t.airport,18)+'</td>'
+        +'<td style="width:150px;padding:2px 8px;vertical-align:middle;font-size:10px;color:#666">'+cut(feeStr||'—',18)+'</td>'
+        +'<td style="width:90px;padding:2px 8px;vertical-align:middle;text-align:right;font-size:13px;color:#1e8449;font-weight:bold">$'+t.finalTotal.toLocaleString()+'</td>'
         +'</tr></table>'
       +'</div>';
     }).join('');
@@ -715,12 +715,12 @@ function buildPDFHTML(r,ml){
       +'<div style="background:#1a1d27;color:#fff;padding:6px 10px;font-size:11px;font-weight:bold">'+src.label+' — '+src.count+' 趟</div>'
       +'<div style="border:1px solid #ddd;border-top:none">'
         +'<div style="background:#f0ede8;padding:4px 0;border-bottom:1px solid #ddd">'
-          +'<table style="width:100%;border-collapse:collapse"><tr>'
-            +'<td style="width:100px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">序號/訂單</td>'
-            +'<td style="width:130px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">乘客/類型</td>'
-            +'<td style="width:160px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">路線</td>'
-            +'<td style="width:160px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">費用明細</td>'
-            +'<td style="padding:0 10px;font-size:9px;color:#888;font-weight:bold;text-align:right">金額</td>'
+          +'<table style="width:722px;border-collapse:collapse;table-layout:fixed"><tr>'
+            +'<td style="width:100px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">序號/訂單/時間</td>'
+            +'<td style="width:135px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">乘客/類型</td>'
+            +'<td style="width:155px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">路線</td>'
+            +'<td style="width:150px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">費用明細</td>'
+            +'<td style="width:90px;padding:0 8px;font-size:9px;color:#888;font-weight:bold;text-align:right">金額</td>'
           +'</tr></table>'
         +'</div>'
         +rows
@@ -729,65 +729,46 @@ function buildPDFHTML(r,ml){
   }).join('');
 
   const adjRows=r.adjs&&r.adjs.length?r.adjs.map(a=>
-    '<div style="display:table;width:100%;padding:5px 0;border-bottom:1px solid #f0ede8;font-size:12px">'
-      +'<div style="display:table-cell;color:#555">'+(a.type==='plus'?'＋':'－')+' '+(a.desc||'調整項')+'</div>'
-      +'<div style="display:table-cell;text-align:right;color:'+(a.type==='plus'?'#1e8449':'#c0392b')+'">'+(a.type==='plus'?'+':'-')+'$'+(a.amount||0).toLocaleString()+'</div>'
-    +'</div>'
+    '<table style="width:100%;border-collapse:collapse"><tr>'
+      +'<td style="padding:5px 0;font-size:12px;color:#555">'+(a.type==='plus'?'＋':'－')+' '+(a.desc||'調整項')+'</td>'
+      +'<td style="padding:5px 0;font-size:12px;text-align:right;color:'+(a.type==='plus'?'#1e8449':'#c0392b')+';font-weight:bold">'+(a.type==='plus'?'+':'-')+'$'+(a.amount||0).toLocaleString()+'</td>'
+    +'</tr></table>'
   ).join(''):'';
 
   return '<div style="width:794px;background:#fff;font-family:sans-serif;color:#111">'
-
-    // 頂部橫幅
     +'<div style="background:#111318;color:#fff;padding:24px 36px 20px;border-bottom:3px solid #c0392b">'
-      +'<table style="width:100%;border-collapse:collapse"><tr>'
-        +'<td style="vertical-align:bottom">'
-          +'<div style="font-size:24px;font-weight:bold">'+r.name+'</div>'
-          +'<div style="font-size:12px;color:#aaa;margin-top:4px">'+ml+' 薪資單</div>'
-        +'</td>'
-        +'<td style="text-align:right;vertical-align:bottom">'
+      +'<table style="width:722px;border-collapse:collapse"><tr>'
+        +'<td><div style="font-size:24px;font-weight:bold">'+r.name+'</div>'
+          +'<div style="font-size:12px;color:#aaa;margin-top:4px">'+ml+' 薪資單</div></td>'
+        +'<td style="text-align:right">'
           +'<div style="font-size:11px;color:#888;margin-bottom:3px">本月應領薪資</div>'
           +'<div style="font-size:28px;font-weight:bold;color:#f1c40f">$'+r.netTotal.toLocaleString()+'</div>'
         +'</td>'
       +'</tr></table>'
-
-      // 資訊列
       +'<table style="margin-top:16px;border-collapse:collapse"><tr>'
-        +'<td style="background:rgba(255,255,255,0.1);border-radius:5px;padding:6px 14px;margin-right:8px">'
-          +'<div style="font-size:9px;color:#888">結算月份</div>'
-          +'<div style="font-size:13px;font-weight:bold;margin-top:2px">'+ml+'</div>'
-        +'</td>'
-        +'<td style="width:10px"></td>'
-        +'<td style="background:rgba(255,255,255,0.1);border-radius:5px;padding:6px 14px">'
-          +'<div style="font-size:9px;color:#888">總趟數</div>'
-          +'<div style="font-size:13px;font-weight:bold;margin-top:2px">'+totalTrips+' 趟</div>'
-        +'</td>'
-        +r.sources.map(src=>'<td style="width:10px"></td><td style="background:rgba(255,255,255,0.1);border-radius:5px;padding:6px 14px"><div style="font-size:9px;color:#888">'+src.label+' 抽成</div><div style="font-size:13px;font-weight:bold;margin-top:2px">'+src.rate+'%</div></td>').join('')
+        +'<td style="background:rgba(255,255,255,0.12);border-radius:4px;padding:6px 14px"><div style="font-size:9px;color:#888">結算月份</div><div style="font-size:13px;font-weight:bold;margin-top:2px">'+ml+'</div></td>'
+        +'<td style="width:8px"></td>'
+        +'<td style="background:rgba(255,255,255,0.12);border-radius:4px;padding:6px 14px"><div style="font-size:9px;color:#888">總趟數</div><div style="font-size:13px;font-weight:bold;margin-top:2px">'+totalTrips+' 趟</div></td>'
+        +r.sources.map(src=>'<td style="width:8px"></td><td style="background:rgba(255,255,255,0.12);border-radius:4px;padding:6px 14px"><div style="font-size:9px;color:#888">'+src.label+' 抽成</div><div style="font-size:13px;font-weight:bold;margin-top:2px">'+src.rate+'%</div></td>').join('')
       +'</tr></table>'
     +'</div>'
-
-    // 薪資摘要
     +'<div style="margin:20px 36px;border:1px solid #ddd;border-radius:6px;overflow:hidden">'
       +'<div style="background:#f8f7f4;padding:8px 12px;font-size:11px;font-weight:bold;color:#888">薪資計算摘要</div>'
       +'<div style="padding:4px 12px 8px">'
-        +r.sources.map(src=>'<div style="display:table;width:100%;padding:6px 0;border-bottom:1px solid #f0ede8;font-size:12px"><div style="display:table-cell;color:#555">'+src.label+'（'+src.count+'趟）× '+src.rate+'%</div><div style="display:table-cell;text-align:right;color:#1e8449;font-weight:bold">$'+src.netFromSrc.toLocaleString()+'</div></div>').join('')
-        +'<div style="display:table;width:100%;padding:7px 0;border-bottom:1px solid #ddd;font-size:13px;font-weight:bold"><div style="display:table-cell">各來源司機抽成合計</div><div style="display:table-cell;text-align:right">$'+r.baseNet.toLocaleString()+'</div></div>'
+        +r.sources.map(src=>'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:5px 0;font-size:12px;color:#555;border-bottom:1px solid #f0ede8">'+src.label+'（'+src.count+'趟）× '+src.rate+'%</td><td style="padding:5px 0;font-size:12px;text-align:right;color:#1e8449;font-weight:bold;border-bottom:1px solid #f0ede8">$'+src.netFromSrc.toLocaleString()+'</td></tr></table>').join('')
+        +'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:6px 0;font-size:13px;font-weight:bold;border-bottom:1px solid #ddd">各來源司機抽成合計</td><td style="padding:6px 0;font-size:13px;font-weight:bold;text-align:right;border-bottom:1px solid #ddd">$'+r.baseNet.toLocaleString()+'</td></tr></table>'
         +adjRows
       +'</div>'
-      +'<div style="background:#111318;color:#fff;padding:10px 12px;display:table;width:100%">'
-        +'<div style="display:table-cell;font-size:13px;font-weight:bold">本月應領薪資</div>'
-        +'<div style="display:table-cell;text-align:right;font-size:20px;font-weight:bold;color:#f1c40f">$'+r.netTotal.toLocaleString()+'</div>'
-      +'</div>'
+      +'<table style="width:100%;border-collapse:collapse;background:#111318;color:#fff"><tr>'
+        +'<td style="padding:10px 12px;font-size:13px;font-weight:bold">本月應領薪資</td>'
+        +'<td style="padding:10px 12px;font-size:20px;font-weight:bold;color:#f1c40f;text-align:right">$'+r.netTotal.toLocaleString()+'</td>'
+      +'</tr></table>'
     +'</div>'
-
-    // 趟次明細
     +'<div style="margin:0 36px 24px">'
       +'<div style="font-size:11px;font-weight:bold;color:#888;padding-bottom:6px;border-bottom:2px solid #111;margin-bottom:14px">趟次明細</div>'
       +tripSections
     +'</div>'
-
-    +'<div style="margin:0 36px 28px;padding-top:8px;border-top:1px solid #ddd;font-size:9px;color:#ccc;text-align:center">'
-      +'此薪資單由系統自動產生　｜　列印日期：'+new Date().toLocaleDateString('zh-TW')
-    +'</div>'
+    +'<div style="margin:0 36px 28px;padding-top:8px;border-top:1px solid #ddd;font-size:9px;color:#ccc;text-align:center">此薪資單由系統自動產生　｜　列印日期：'+new Date().toLocaleDateString('zh-TW')+'</div>'
   +'</div>';
 }
 
