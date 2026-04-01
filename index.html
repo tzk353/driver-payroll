@@ -1032,26 +1032,6 @@ function readExcelData(file){
   });
 }
 
-async function renderPDF(r,mo){
-  const tpl=document.getElementById('pdfTpl');
-  tpl.innerHTML=buildPDFHTML(r);
-  await document.fonts.ready;
-  await new Promise(x=>setTimeout(x,400));
-  const canvas=await html2canvas(tpl,{scale:2,useCORS:true,backgroundColor:'#ffffff',width:794});
-  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-  const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
-  const pageH=ph/pw*canvas.width;let y=0;
-  while(y<canvas.height){
-    const sliceH=Math.min(pageH,canvas.height-y);
-    const sc=document.createElement('canvas');sc.width=canvas.width;sc.height=sliceH;
-    sc.getContext('2d').drawImage(canvas,0,-y);
-    if(y>0)pdf.addPage();
-    pdf.addImage(sc.toDataURL('image/png'),'PNG',0,0,pw,sliceH*(pw/canvas.width));
-    y+=sliceH;
-  }
-  pdf.save(`薪資單_${r.name}_${mo}.pdf`);
-  tpl.innerHTML='';
-}
 </script>
 </body>
 </html>
