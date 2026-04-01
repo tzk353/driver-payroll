@@ -787,7 +787,7 @@ function dlAllExcel(){payrollResult.forEach((_,i)=>dlExcel(i));}
 async function dlPDF(idx){
   const r=payrollResult[idx];
   const mo=document.getElementById('payMonth').value||'本月';
-  const ml=getML();
+  const ml=r.ml||getML();  // 優先用 Excel 裡的月份
   const tpl=document.getElementById('pdfTpl');
   tpl.innerHTML=buildPDFHTML(r,ml);
   await document.fonts.ready;
@@ -829,7 +829,7 @@ async function dlPDF(idx){
     y=cutY;
     if(y>=canvas.height)break;
   }
-  pdf.save('薪資單_'+r.name+'_'+mo+'.pdf');
+  pdf.save('薪資單_'+r.name+'_'+(r.ml||mo)+'.pdf');
   tpl.innerHTML='';
 }
 async function dlAllPDF(){
