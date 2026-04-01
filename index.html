@@ -677,7 +677,7 @@ function renderResults(){
 //  PDF buildPDFHTML
 // ══════════════════════════════
 function buildPDFHTML(r,ml){
-  if(!ml)ml=getML();
+  ml=r.ml||ml||getML();  // 優先用 r.ml（Excel 讀取的），再用傳入的，最後才用選擇器
   const totalTrips=r.sources.reduce((s,src)=>s+src.count,0);
 
   // 截斷文字，避免溢出欄位
@@ -839,10 +839,44 @@ async function dlAllPDF(){
   }
 }
 async function renderPDF(r,mo){
-  const saved=[...payrollResult];
-  payrollResult.push(r);
-  await dlPDF(payrollResult.length-1);
-  payrollResult=saved;
+  // 直接渲染，不推進 payrollResult 避免月份被覆蓋
+  const tpl=document.getElementById('pdfTpl');
+  tpl.innerHTML=buildPDFHTML(r, r.ml||mo);
+  await document.fonts.ready;
+  await new Promise(x=>setTimeout(x,600));
+  const canvas=await html2canvas(tpl,{scale:2,useCORS:true,backgroundColor:'#ffffff',width:794,logging:false});
+  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
+  const scale=canvas.width/794;
+  const pagePixH=Math.floor(ph/pw*canvas.width);
+  const rowEls=tpl.querySelectorAll('[data-row]');
+  const rowBottoms=[...rowEls].map(el=>{
+    const rect=el.getBoundingClientRect();
+    const tplRect=tpl.getBoundingClientRect();
+    return Math.round((rect.bottom-tplRect.top)*scale);
+  }).filter(v=>v>0).sort((a,b)=>a-b);
+  function findCutPoint(startY){
+    const limit=startY+pagePixH;
+    let cut=limit;
+    for(let i=rowBottoms.length-1;i>=0;i--){
+      const rb=rowBottoms[i];
+      if(rb<=limit-20&&rb>startY+20){cut=rb;break;}
+    }
+    return Math.min(cut,canvas.height);
+  }
+  let y=0;
+  while(y<canvas.height){
+    const cutY=rowBottoms.length>0?findCutPoint(y):Math.min(y+pagePixH,canvas.height);
+    const sliceH=cutY-y;
+    const sc=document.createElement('canvas');sc.width=canvas.width;sc.height=sliceH;
+    sc.getContext('2d').drawImage(canvas,0,-y);
+    if(y>0)pdf.addPage();
+    pdf.addImage(sc.toDataURL('image/png'),'PNG',0,0,pw,sliceH*(pw/canvas.width));
+    y=cutY;
+    if(y>=canvas.height)break;
+  }
+  pdf.save('薪資單_'+r.name+'_'+(r.ml||mo)+'.pdf');
+  tpl.innerHTML='';
 }
 
 
@@ -900,7 +934,7 @@ async function handleExcelToPDF(input){
     status.appendChild(rowEl);
     try{
       const r=await readExcelData(f);
-      rowEl.textContent=`⏳ ${r.name}（月份：${r.ml||'未讀到'}）：產生 PDF 中…`;
+      rowEl.textContent=`⏳ ${r.name}（月份：${r.ml}）：產生 PDF 中…`;
       const mo=document.getElementById('payMonth').value||'本月';
       await renderPDF(r,mo);
       rowEl.innerHTML=`<span style="color:var(--green)">✅ ${r.name} 的 PDF 已下載</span>`;
