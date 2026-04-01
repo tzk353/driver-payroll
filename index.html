@@ -900,7 +900,7 @@ async function handleExcelToPDF(input){
     status.appendChild(rowEl);
     try{
       const r=await readExcelData(f);
-      rowEl.textContent=`⏳ ${r.name}（${r.ml}）：產生 PDF 中…`;
+      rowEl.textContent=`⏳ ${r.name}（月份：${r.ml||'未讀到'}）：產生 PDF 中…`;
       const mo=document.getElementById('payMonth').value||'本月';
       await renderPDF(r,mo);
       rowEl.innerHTML=`<span style="color:var(--green)">✅ ${r.name} 的 PDF 已下載</span>`;
@@ -916,14 +916,27 @@ function readExcelData(file){
     const reader=new FileReader();
     reader.onload=e=>{
       try{
-        const wb=XLSX.read(e.target.result,{type:'array'});
+        const wb=XLSX.read(e.target.result,{type:'array',cellDates:true,cellText:true});
         const ws1=wb.Sheets['趟次明細'],ws2=wb.Sheets['薪資計算'];
         if(!ws1||!ws2){rej(new Error('找不到「趟次明細」或「薪資計算」工作表'));return;}
         const rows1=XLSX.utils.sheet_to_json(ws1,{header:1,defval:''});
         const rows2=XLSX.utils.sheet_to_json(ws2,{header:1,defval:''});
 
         const name=String(rows2[0]?.[1]||'').trim();
-        const ml=String(rows2[1]?.[1]||'').trim();
+        // 直接從 B2 raw cell 讀月份，避免 XLSX 自動轉型
+        const ws2raw=wb.Sheets['薪資計算'];
+        let ml='';
+        const b2=ws2raw['B2'];
+        if(b2){
+          if(b2.t==='d'&&b2.v){
+            const d=new Date(b2.v);ml=`${d.getFullYear()} 年 ${d.getMonth()+1} 月`;
+          } else if(b2.t==='n'&&b2.v){
+            const d=XLSX.SSF.parse_date_code(b2.v);ml=`${d.y} 年 ${d.m} 月`;
+          } else {
+            ml=String(b2.v||b2.w||'').trim();
+          }
+        }
+        if(!ml)ml=String(rows2[1]?.[1]||'').trim();
         let netTotal=0,baseNet=0;
         const adjs=[];
         const srcRates={};
