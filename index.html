@@ -900,7 +900,7 @@ async function handleExcelToPDF(input){
     status.appendChild(rowEl);
     try{
       const r=await readExcelData(f);
-      rowEl.textContent=`⏳ ${r.name}：產生 PDF 中…`;
+      rowEl.textContent=`⏳ ${r.name}（${r.ml}）：產生 PDF 中…`;
       const mo=document.getElementById('payMonth').value||'本月';
       await renderPDF(r,mo);
       rowEl.innerHTML=`<span style="color:var(--green)">✅ ${r.name} 的 PDF 已下載</span>`;
