@@ -1001,7 +1001,7 @@ function readExcelData(file){
           if(col0&&isNaN(parseInt(col0))&&!row[1]&&!row[2]){
             curSrc=col0;
             if(!sourcesMap[curSrc])sourcesMap[curSrc]={label:curSrc,count:0,subtotal:0,trips:[],rate:srcRates[curSrc]||90};
-          } else if(curSrc&&!isNaN(finalTotal)&&finalTotal>0){
+          } else if(curSrc&&!isNaN(finalTotal)&&finalTotal!==0){
             const meetCol=hRow.findIndex(h=>String(h).includes('Meet'));
             const hasMeet=meetCol>=0&&String(row[meetCol]||'').includes('Meet');
             sourcesMap[curSrc].trips.push({
