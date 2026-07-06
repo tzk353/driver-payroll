@@ -721,28 +721,87 @@ function renderResults(){
     <button class="btn btn-outline btn-sm" onclick="goStep(2)" style="background:rgba(255,255,255,.08);border-color:#444;color:#fff;font-size:11px">← 修改設定</button>`;
 
   document.getElementById('rgrid').innerHTML=payrollResult.map((r,idx)=>{
+    const totalTrips=r.sources.reduce((s,src)=>s+src.count,0);
+    const rateDesc=r.sources.map(s=>`${s.label}${s.rate}%`).join('、');
+
+    // 摘要列：各來源
     const srcRows=r.sources.map(src=>`
       <div class="prow">
         <span class="plabel">${src.label}（${src.count}趟 × ${src.rate}%）</span>
         <span class="pval green">$${src.netFromSrc.toLocaleString()}</span>
       </div>`).join('');
-    const adjRows=r.adjs.map(a=>`<div class="prow"><span class="plabel">${a.type==='plus'?'＋':'－'} ${a.desc||'調整項'}</span><span class="pval ${a.type==='plus'?'green':'red'}">${a.type==='plus'?'+':'-'}$${(a.amount||0).toLocaleString()}</span></div>`).join('');
+
+    // 加減項
+    const adjRows=r.adjs.map(a=>`
+      <div class="prow">
+        <span class="plabel">${a.type==='plus'?'＋':'－'} ${a.desc||'調整項'}</span>
+        <span class="pval ${a.type==='plus'?'green':'red'}">${a.type==='plus'?'+':'-'}$${(a.amount||0).toLocaleString()}</span>
+      </div>`).join('');
+
+    // 額外明細
+    const extraRows=(r.extraItems||[]).map(item=>`
+      <div class="prow">
+        <span class="plabel">＋ ${item.desc||'額外項目'}（${item.rate!=null?item.rate:90}%）</span>
+        <span class="pval green">$${item.netAmount.toLocaleString()}</span>
+      </div>`).join('');
+
+    // 趟次明細（摺疊）
     const detailRows=r.sources.map(src=>`
-      <tr class="sh"><td colspan="5">${src.label}（司機抽成${src.rate}%）</td></tr>
-      ${src.trips.map((t,i)=>`<tr><td class="mono" style="color:#bbb">${String(i+1).padStart(2,'0')}</td><td class="mono blue" style="font-size:10px">${t.orderId||'—'}</td><td>${t.time||'—'}</td><td>${t.member||'—'} ${t.type?'｜'+t.type:''}</td><td class="mono green" style="text-align:right">$${t.finalTotal.toLocaleString()}</td></tr>`).join('')}`).join('');
-    const rateDesc=r.sources.map(s=>`${s.label}${s.rate}%`).join('、');
+      <tr class="sh"><td colspan="5">${src.label}（${src.rate}%）— ${src.count} 趟　小計 $${src.subtotal.toLocaleString()}</td></tr>
+      ${src.trips.map((t,i)=>`<tr>
+        <td class="mono" style="color:#bbb;font-size:10px">${String(i+1).padStart(2,'0')}</td>
+        <td class="mono blue" style="font-size:10px">${t.orderId||'—'}</td>
+        <td style="font-size:10px">${t.time||'—'}</td>
+        <td style="font-size:10px">${t.member||'—'}${t.type?` ｜ ${t.type}`:''}</td>
+        <td class="mono green" style="text-align:right">$${t.finalTotal.toLocaleString()}</td>
+      </tr>`).join('')}`).join('');
+
     return`<div class="pcard">
-      <div class="pc-hd"><div><div class="pc-name">${r.name}</div><div class="pc-meta">${ml} | ${rateDesc}</div></div></div>
+      <div class="pc-hd">
+        <div>
+          <div class="pc-name">${r.name}</div>
+          <div class="pc-meta">${ml} ｜ ${rateDesc} ｜ ${totalTrips} 趟</div>
+        </div>
+      </div>
       <div class="pc-body">
         ${srcRows}
-        <div class="prow" style="font-weight:700;margin-top:4px;border-top:1px solid var(--s2);padding-top:6px"><span class="plabel">各來源司機抽成合計</span><span class="pval">$${r.baseNet.toLocaleString()}</span></div>
+        <div class="prow" style="font-weight:700;border-top:1px solid var(--s2);padding-top:6px;margin-top:4px">
+          <span class="plabel">各來源司機抽成合計</span>
+          <span class="pval">$${r.baseNet.toLocaleString()}</span>
+        </div>
         ${adjRows}
-        <button class="toggle-btn" style="margin-top:8px" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=(this.nextElementSibling.classList.contains('open')?'▼':'▶')+' 趟次明細（${r.sources.reduce((s,src)=>s+src.count,0)} 趟）'">▶ 趟次明細（${r.sources.reduce((s,src)=>s+src.count,0)} 趟）</button>
-        <div class="detail-wrap"><table class="dtt"><thead><tr><th>#</th><th>訂單編號</th><th>時間</th><th>乘客 ｜ 類型</th><th style="text-align:right">金額</th></tr></thead><tbody>${detailRows}</tbody></table></div>
+        ${extraRows}
+        ${r.adjs.length||r.extraItems?.length?`
+        <div class="prow" style="font-weight:700;border-top:1px solid var(--s2);padding-top:6px;margin-top:4px">
+          <span class="plabel">本月應領薪資</span>
+          <span class="pval" style="color:var(--ink)">$${r.netTotal.toLocaleString()}</span>
+        </div>`:''}
+        <button class="toggle-btn" style="margin-top:10px;font-size:10px"
+          onclick="this.nextElementSibling.classList.toggle('open');this.textContent=(this.nextElementSibling.classList.contains('open')?'▼':'▶')+' 趟次明細（${totalTrips} 趟）'">
+          ▶ 趟次明細（${totalTrips} 趟）
+        </button>
+        <div class="detail-wrap">
+          <table class="dtt">
+            <thead><tr><th>#</th><th>訂單編號</th><th>時間</th><th>乘客 ｜ 類型</th><th style="text-align:right">金額</th></tr></thead>
+            <tbody>${detailRows}</tbody>
+          </table>
+        </div>
       </div>
-      <div class="pc-total"><div><div class="pc-total-label">本月應領薪資</div><div style="font-size:9px;color:#666;margin-top:1px">${rateDesc}${r.plusAdj>0?' + 加項':''}${r.minusAdj>0?' − 減項':''}${r.extraNet>0?' + 額外項目':''}</div></div>
-      <div class="pc-amount">$${r.netTotal.toLocaleString()}</div></div>
-      ${r.actualPay!==r.netTotal?`<div style="background:#1a5276;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;color:#aaa">實領薪資（已手動調整）</div></div><div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#58d68d">$${r.actualPay.toLocaleString()}</div></div>`:''}
+      <div class="pc-total">
+        <div>
+          <div class="pc-total-label">${r.actualPay!==r.netTotal?'本月應領薪資':'本月應領薪資'}</div>
+          <div style="font-size:9px;color:#666;margin-top:1px">${rateDesc}${r.plusAdj>0?' + 加項':''}${r.minusAdj>0?' − 減項':''}${r.extraNet>0?' + 額外':''}
+          </div>
+        </div>
+        <div class="pc-amount">$${r.netTotal.toLocaleString()}</div>
+      </div>
+      ${r.actualPay!==r.netTotal?`
+      <div style="background:#1a5276;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:12px;color:#aaa">本月實領薪資</div>
+        </div>
+        <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#58d68d">$${r.actualPay.toLocaleString()}</div>
+      </div>`:''}
       <div class="pc-actions">
         <button class="btn btn-orange btn-sm" onclick="dlExcel(${idx})">📊 下載 Excel</button>
         <button class="btn btn-blue btn-sm" onclick="dlPDF(${idx})">📄 下載 PDF</button>
