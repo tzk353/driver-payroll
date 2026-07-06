@@ -392,7 +392,7 @@ function parseKlook(rows,hRow){
 function detectSrc(fn){if(/百世/i.test(fn))return'格上';if(/格上/i.test(fn))return'格上';if(/klook/i.test(fn))return'KLOOK';if(/全球通/i.test(fn))return'全球通';if(/台灣大/i.test(fn))return'台灣大車隊';return fn.replace(/\.[^.]+$/,'').slice(0,8)}
 function extractName(fn){const m=fn.match(/[_\-－]([^\s_\-－\.]{2,4})(?:\.|$)/);if(m)return m[1];const m2=fn.match(/[\u4e00-\u9fff]{2,4}/g);return m2?m2[m2.length-1]:null}
 function ensureDriver(n){
-  if(!driverData[n])driverData[n]={sources:[],adjs:[],fe:{},excluded:false,srcRates:{},actualPay:null,extraItems:[]};
+  if(!driverData[n])driverData[n]={sources:[],adjs:[],fe:{},excluded:false,srcRates:{},actualPay:null,extraItems:[],netTotalOverride:null,monthlySalaryMode:false,monthlySalary:null};
   ALL_FEES.forEach(k=>{if(driverData[n].fe[k]===undefined)driverData[n].fe[k]=true});
 }
 function ensureSrc(n,l){
@@ -501,25 +501,52 @@ function renderDriverArea(){
           <button class="add-adj" onclick="addAdj('${name}')">＋ 新增加減項</button>
         </div>
         <div class="adj-section" style="margin-top:10px;padding-top:10px;border-top:2px solid var(--s2)">
-          <div class="adj-label" style="margin-bottom:8px">💰 實領薪資設定</div>
-          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start">
-            <div style="background:var(--s2);border-radius:5px;padding:8px 12px;font-size:11px">
-              <div style="color:var(--muted);margin-bottom:2px">應領薪資（自動計算）</div>
-              <div style="font-size:15px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:var(--ink)" id="calc_${sid(name)}">$${dgt(d).toLocaleString()}</div>
-            </div>
-            <div style="background:#fff;border:1px solid var(--rule);border-radius:5px;padding:8px 12px;font-size:11px">
-              <div style="color:var(--muted);margin-bottom:4px">實領薪資（可手動覆蓋）</div>
-              <div style="display:flex;align-items:center;gap:5px">
-                <span style="color:var(--green);font-weight:700">$</span>
-                <input type="number" placeholder="留空則等於應領" value="${d.actualPay!=null?d.actualPay:''}"
-                  style="border:1px solid var(--rule);border-radius:3px;padding:4px 7px;font-size:13px;width:110px;font-family:'IBM Plex Mono',monospace;background:var(--paper);outline:none"
-                  onchange="driverData['${name}'].actualPay=this.value===''?null:parseFloat(this.value)||0;refreshTotals('${name}')">
-                <button onclick="driverData['${name}'].actualPay=null;this.previousElementSibling.value='';refreshTotals('${name}')" style="background:none;border:none;color:var(--light);cursor:pointer;font-size:12px" title="清除，回到自動計算">✕</button>
+          <div class="adj-label" style="margin-bottom:8px">💰 薪資設定</div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start">
+            <!-- 月薪模式開關 -->
+            <div style="background:#fff;border:1px solid var(--rule);border-radius:5px;padding:8px 12px;font-size:11px;min-width:220px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;font-weight:700">
+                  <input type="checkbox" ${d.monthlySalaryMode?'checked':''} onchange="driverData['${name}'].monthlySalaryMode=this.checked;renderDriverArea()">
+                  月薪模式
+                </label>
+                <span style="font-size:9px;color:var(--muted)">固定月薪覆蓋應領</span>
               </div>
+              ${d.monthlySalaryMode?`
+              <div style="display:flex;align-items:center;gap:4px">
+                <span style="font-size:10px;color:var(--muted)">月薪 $</span>
+                <input type="number" placeholder="如 36000" value="${d.monthlySalary!=null?d.monthlySalary:''}"
+                  style="border:1px solid #f0c040;border-radius:3px;padding:3px 6px;font-size:13px;width:100px;font-family:'IBM Plex Mono',monospace;background:#fffdf0;outline:none;font-weight:700"
+                  onchange="driverData['${name}'].monthlySalary=parseFloat(this.value)||null;driverData['${name}'].netTotalOverride=parseFloat(this.value)||null">
+              </div>
+              <div style="font-size:9px;color:var(--muted);margin-top:4px">業績照常計算，但應領固定為此金額</div>`:`
+              <div style="font-size:11px">
+                <div style="color:var(--muted);margin-bottom:2px;font-size:9px">應領薪資（自動計算）</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:13px" id="calc_${sid(name)}">$${dgt(d).toLocaleString()}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;margin-top:5px">
+                <span style="font-size:9px;color:var(--muted)">覆蓋 $</span>
+                <input type="number" placeholder="留空自動" value="${d.netTotalOverride!=null?d.netTotalOverride:''}"
+                  style="border:1px solid var(--rule);border-radius:3px;padding:3px 6px;font-size:11px;width:90px;font-family:'IBM Plex Mono',monospace;background:var(--paper);outline:none"
+                  onchange="driverData['${name}'].netTotalOverride=this.value===''?null:parseFloat(this.value)||0">
+                <button onclick="driverData['${name}'].netTotalOverride=null;this.previousElementSibling.value=''" style="background:none;border:none;color:var(--light);cursor:pointer;font-size:11px">✕</button>
+              </div>`}
+            </div>
+            <!-- 實領薪資 -->
+            <div style="background:#f0f7ff;border:1px solid #aad4f5;border-radius:5px;padding:8px 12px;font-size:11px">
+              <div style="color:#1a5276;margin-bottom:4px;font-weight:700">實領薪資 <span style="font-size:9px;font-weight:400">（完全獨立，不影響應領）</span></div>
+              <div style="display:flex;align-items:center;gap:4px">
+                <span style="font-size:10px;color:var(--muted)">$</span>
+                <input type="number" placeholder="留空則不顯示" value="${d.actualPay!=null?d.actualPay:''}"
+                  style="border:1px solid #aad4f5;border-radius:3px;padding:3px 6px;font-size:12px;width:100px;font-family:'IBM Plex Mono',monospace;background:#fff;outline:none"
+                  onchange="driverData['${name}'].actualPay=this.value===''?null:parseFloat(this.value)||0">
+                <button onclick="driverData['${name}'].actualPay=null;this.previousElementSibling.value=''" style="background:none;border:none;color:var(--light);cursor:pointer;font-size:11px">✕</button>
+              </div>
+              <div style="font-size:9px;color:var(--muted);margin-top:4px">在 Excel 加減預支/補貼後，PDF 顯示此金額</div>
             </div>
           </div>
           <div style="margin-top:10px">
-            <div class="adj-label" style="margin-bottom:6px">額外明細項目 <span style="font-weight:400;color:var(--muted)">（會依來源抽成比例計算後加入實領）</span></div>
+            <div class="adj-label" style="margin-bottom:6px">額外明細項目 <span style="font-weight:400;color:var(--muted)">（依填入抽成%計算後加入應領）</span></div>
             <div id="extra_${sid(name)}"></div>
             <button class="add-adj" onclick="addExtra('${name}')">＋ 新增額外項目</button>
           </div>
@@ -698,10 +725,15 @@ function calcAndRender(){
       const minusAdj=d.adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+(a.amount||0),0);
       const extraItems=(d.extraItems||[]).map(item=>({...item,netAmount:calcExtraNet(d,item)}));
       const extraNet=extraItems.reduce((s,item)=>s+item.netAmount,0);
-      const calcPay=baseNet+plusAdj-minusAdj+extraNet;
-      const actualPay=d.actualPay!=null?d.actualPay:calcPay;
+      // 應領 = 月薪模式 > 手動覆蓋 > 自動計算
+      const calcNet=baseNet+plusAdj-minusAdj+extraNet;
+      const isMonthlySalary=d.monthlySalaryMode&&d.monthlySalary!=null;
+      const netTotal=isMonthlySalary?d.monthlySalary:d.netTotalOverride!=null?d.netTotalOverride:calcNet;
+      // 實領 = 完全獨立
+      const actualPay=d.actualPay!=null?d.actualPay:null;
       return{name,tripsTotal,baseNet,plusAdj,minusAdj,extraItems,extraNet,
-             netTotal:calcPay,actualPay,sources,adjs:d.adjs,fe:d.fe,srcRates:d.srcRates};
+             calcNet,netTotal,actualPay,isMonthlySalary,monthlySalary:d.monthlySalary,
+             sources,adjs:d.adjs,fe:d.fe,srcRates:d.srcRates};
   });
   renderResults();goStep(3);
 }
@@ -759,19 +791,28 @@ function renderResults(){
     return`<div class="pcard">
       <div class="pc-hd">
         <div>
-          <div class="pc-name">${r.name}</div>
-          <div class="pc-meta">${ml} ｜ ${rateDesc} ｜ ${totalTrips} 趟</div>
+          <div class="pc-name">${r.name} ${r.isMonthlySalary?'<span style="font-size:10px;background:#f1c40f;color:#111;border-radius:3px;padding:1px 6px;margin-left:6px;font-weight:700">月薪</span>':''}</div>
+          <div class="pc-meta">${ml} ｜ ${r.isMonthlySalary?`月薪 $${r.monthlySalary?.toLocaleString()}`:rateDesc} ｜ ${totalTrips} 趟</div>
         </div>
       </div>
       <div class="pc-body">
-        ${srcRows}
+        ${r.isMonthlySalary?`
+        <div class="prow" style="background:#fffdf0;border-radius:4px;padding:6px 8px;margin-bottom:4px">
+          <span class="plabel" style="color:#b7860b">月薪（固定）</span>
+          <span class="pval" style="color:#b7860b">$${r.netTotal.toLocaleString()}</span>
+        </div>
+        <div class="prow" style="font-size:11px">
+          <span class="plabel" style="color:#aaa">業績參考（${rateDesc}）</span>
+          <span class="pval" style="color:#aaa;font-size:11px">$${r.calcNet.toLocaleString()}</span>
+        </div>`
+        :`${srcRows}
         <div class="prow" style="font-weight:700;border-top:1px solid var(--s2);padding-top:6px;margin-top:4px">
           <span class="plabel">各來源司機抽成合計</span>
           <span class="pval">$${r.baseNet.toLocaleString()}</span>
-        </div>
+        </div>`}
         ${adjRows}
         ${extraRows}
-        ${r.adjs.length||(r.extraItems?.length)?`
+        ${(r.adjs.length||(r.extraItems?.length)||r.isMonthlySalary)?`
         <div class="prow" style="font-weight:700;border-top:1px solid var(--s2);padding-top:6px;margin-top:4px">
           <span class="plabel">本月應領薪資</span>
           <span class="pval" style="color:var(--ink)">$${r.netTotal.toLocaleString()}</span>
@@ -794,7 +835,7 @@ function renderResults(){
         </div>
         <div class="pc-amount">$${r.netTotal.toLocaleString()}</div>
       </div>
-      ${r.actualPay!==r.netTotal?`
+      ${r.actualPay!=null?`
       <div style="background:#1a5276;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:12px;color:#aaa">本月實領薪資</div>
         <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#58d68d">$${r.actualPay.toLocaleString()}</div>
@@ -871,6 +912,13 @@ function buildPDFHTML(r,ml){
     +'</tr></table>'
   ).join(''):'';
 
+  const extraRowsPDF=(r.extraItems&&r.extraItems.length)?r.extraItems.map(item=>
+    '<table style="width:100%;border-collapse:collapse"><tr>'
+      +'<td style="padding:5px 0;font-size:12px;color:#555">＋ '+(item.desc||'額外項目')+'（'+(item.rate!=null?item.rate:90)+'%）</td>'
+      +'<td style="padding:5px 0;font-size:12px;text-align:right;color:#1e8449;font-weight:bold">$'+item.netAmount.toLocaleString()+'</td>'
+    +'</tr></table>'
+  ).join(''):'';
+
   return '<div style="width:794px;background:#fff;font-family:sans-serif;color:#111">'
     +'<div style="background:#111318;color:#fff;padding:24px 36px 20px;border-bottom:3px solid #c0392b">'
       +'<table style="width:722px;border-collapse:collapse"><tr>'
@@ -885,15 +933,24 @@ function buildPDFHTML(r,ml){
         +'<td style="background:rgba(255,255,255,0.12);border-radius:4px;padding:6px 14px"><div style="font-size:9px;color:#888">結算月份</div><div style="font-size:13px;font-weight:bold;margin-top:2px">'+ml+'</div></td>'
         +'<td style="width:8px"></td>'
         +'<td style="background:rgba(255,255,255,0.12);border-radius:4px;padding:6px 14px"><div style="font-size:9px;color:#888">總趟數</div><div style="font-size:13px;font-weight:bold;margin-top:2px">'+totalTrips+' 趟</div></td>'
-        +r.sources.map(src=>'<td style="width:8px"></td><td style="background:rgba(255,255,255,0.12);border-radius:4px;padding:6px 14px"><div style="font-size:9px;color:#888">'+src.label+' 抽成</div><div style="font-size:13px;font-weight:bold;margin-top:2px">'+src.rate+'%</div></td>').join('')
+        +(r.isMonthlySalary?
+          '<td style="width:8px"></td><td style="background:rgba(241,196,15,0.2);border-radius:4px;padding:6px 14px"><div style="font-size:9px;color:#f1c40f">月薪</div><div style="font-size:13px;font-weight:bold;margin-top:2px;color:#f1c40f">$'+r.netTotal.toLocaleString()+'</div></td>'
+          :r.sources.map(src=>'<td style="width:8px"></td><td style="background:rgba(255,255,255,0.12);border-radius:4px;padding:6px 14px"><div style="font-size:9px;color:#888">'+src.label+' 抽成</div><div style="font-size:13px;font-weight:bold;margin-top:2px">'+src.rate+'%</div></td>').join('')
+        )
       +'</tr></table>'
     +'</div>'
     +'<div style="margin:20px 36px;border:1px solid #ddd;border-radius:6px;overflow:hidden">'
       +'<div style="background:#f8f7f4;padding:8px 12px;font-size:11px;font-weight:bold;color:#888">薪資計算摘要</div>'
       +'<div style="padding:4px 12px 8px">'
-        +r.sources.map(src=>'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:5px 0;font-size:12px;color:#555;border-bottom:1px solid #f0ede8">'+src.label+'（'+src.count+'趟）× '+src.rate+'%</td><td style="padding:5px 0;font-size:12px;text-align:right;color:#1e8449;font-weight:bold;border-bottom:1px solid #f0ede8">$'+src.netFromSrc.toLocaleString()+'</td></tr></table>').join('')
-        +'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:6px 0;font-size:13px;font-weight:bold;border-bottom:1px solid #ddd">各來源司機抽成合計</td><td style="padding:6px 0;font-size:13px;font-weight:bold;text-align:right;border-bottom:1px solid #ddd">$'+r.baseNet.toLocaleString()+'</td></tr></table>'
+        +(r.isMonthlySalary?
+          '<table style="width:100%;border-collapse:collapse"><tr><td style="padding:6px 0;font-size:12px;color:#555;border-bottom:1px solid #f0ede8">月薪（固定）</td><td style="padding:6px 0;font-size:12px;text-align:right;color:#1e8449;font-weight:bold;border-bottom:1px solid #f0ede8">$'+r.netTotal.toLocaleString()+'</td></tr></table>'
+          +'<div style="font-size:9px;color:#aaa;padding:4px 0">業績參考：$'+r.calcNet.toLocaleString()+'（'+r.sources.map(s=>s.label+s.rate+'%').join('、')+'）</div>'
+          :
+          r.sources.map(src=>'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:5px 0;font-size:12px;color:#555;border-bottom:1px solid #f0ede8">'+src.label+'（'+src.count+'趟）× '+src.rate+'%</td><td style="padding:5px 0;font-size:12px;text-align:right;color:#1e8449;font-weight:bold;border-bottom:1px solid #f0ede8">$'+src.netFromSrc.toLocaleString()+'</td></tr></table>').join('')
+          +'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:6px 0;font-size:13px;font-weight:bold;border-bottom:1px solid #ddd">各來源司機抽成合計</td><td style="padding:6px 0;font-size:13px;font-weight:bold;text-align:right;border-bottom:1px solid #ddd">$'+r.baseNet.toLocaleString()+'</td></tr></table>'
+        )
         +adjRows
+        +extraRowsPDF
       +'</div>'
       +'<table style="width:100%;border-collapse:collapse;background:#111318;color:#fff"><tr>'
         +'<td style="padding:10px 12px;font-size:13px;font-weight:bold">本月應領薪資</td>'
@@ -1045,11 +1102,15 @@ function buildExcelWb(r,ml){
 
   // Sheet 2: 薪資計算
   const calcRows=[['司機姓名',r.name],['結算月份',ml],[''],['項目','金額','說明']];
-  r.sources.forEach(src=>{
-    calcRows.push([`${src.label}趟次合計`,src.subtotal,`${src.count}趟`]);
-    calcRows.push([`${src.label}司機抽成（${src.rate}%）`,src.netFromSrc,`$${src.subtotal.toLocaleString()} × ${src.rate}%`]);
-  });
-  calcRows.push(['各來源司機抽成合計',r.baseNet,'']);
+  if(r.isMonthlySalary){
+    calcRows.push(['月薪（固定）',r.monthlySalary,'月薪模式']);
+  } else {
+    r.sources.forEach(src=>{
+      calcRows.push([`${src.label}趟次合計`,src.subtotal,`${src.count}趟`]);
+      calcRows.push([`${src.label}司機抽成（${src.rate}%）`,src.netFromSrc,`$${src.subtotal.toLocaleString()} × ${src.rate}%`]);
+    });
+    calcRows.push(['各來源司機抽成合計',r.baseNet,'']);
+  }
   if(r.adjs.length){calcRows.push(['']);r.adjs.forEach(a=>calcRows.push([a.desc||'調整項',a.type==='plus'?a.amount:-a.amount,a.type==='plus'?'加項':'減項']));}
   if(r.extraItems&&r.extraItems.length){
     calcRows.push(['']);
