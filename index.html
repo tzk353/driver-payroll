@@ -392,7 +392,7 @@ function parseKlook(rows,hRow){
 function detectSrc(fn){if(/百世/i.test(fn))return'格上';if(/格上/i.test(fn))return'格上';if(/klook/i.test(fn))return'KLOOK';if(/全球通/i.test(fn))return'全球通';if(/台灣大/i.test(fn))return'台灣大車隊';return fn.replace(/\.[^.]+$/,'').slice(0,8)}
 function extractName(fn){const m=fn.match(/[_\-－]([^\s_\-－\.]{2,4})(?:\.|$)/);if(m)return m[1];const m2=fn.match(/[\u4e00-\u9fff]{2,4}/g);return m2?m2[m2.length-1]:null}
 function ensureDriver(n){
-  if(!driverData[n])driverData[n]={sources:[],adjs:[],fe:{},excluded:false,srcRates:{}};
+  if(!driverData[n])driverData[n]={sources:[],adjs:[],fe:{},excluded:false,srcRates:{},actualPay:null,extraItems:[]};
   ALL_FEES.forEach(k=>{if(driverData[n].fe[k]===undefined)driverData[n].fe[k]=true});
 }
 function ensureSrc(n,l){
@@ -500,6 +500,30 @@ function renderDriverArea(){
           <div id="adj_${sid(name)}"></div>
           <button class="add-adj" onclick="addAdj('${name}')">＋ 新增加減項</button>
         </div>
+        <div class="adj-section" style="margin-top:10px;padding-top:10px;border-top:2px solid var(--s2)">
+          <div class="adj-label" style="margin-bottom:8px">💰 實領薪資設定</div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start">
+            <div style="background:var(--s2);border-radius:5px;padding:8px 12px;font-size:11px">
+              <div style="color:var(--muted);margin-bottom:2px">應領薪資（自動計算）</div>
+              <div style="font-size:15px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:var(--ink)" id="calc_${sid(name)}">$${dgt(d).toLocaleString()}</div>
+            </div>
+            <div style="background:#fff;border:1px solid var(--rule);border-radius:5px;padding:8px 12px;font-size:11px">
+              <div style="color:var(--muted);margin-bottom:4px">實領薪資（可手動覆蓋）</div>
+              <div style="display:flex;align-items:center;gap:5px">
+                <span style="color:var(--green);font-weight:700">$</span>
+                <input type="number" placeholder="留空則等於應領" value="${d.actualPay!=null?d.actualPay:''}"
+                  style="border:1px solid var(--rule);border-radius:3px;padding:4px 7px;font-size:13px;width:110px;font-family:'IBM Plex Mono',monospace;background:var(--paper);outline:none"
+                  onchange="driverData['${name}'].actualPay=this.value===''?null:parseFloat(this.value)||0;refreshTotals('${name}')">
+                <button onclick="driverData['${name}'].actualPay=null;this.previousElementSibling.value='';refreshTotals('${name}')" style="background:none;border:none;color:var(--light);cursor:pointer;font-size:12px" title="清除，回到自動計算">✕</button>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <div class="adj-label" style="margin-bottom:6px">額外明細項目 <span style="font-weight:400;color:var(--muted)">（會依來源抽成比例計算後加入實領）</span></div>
+            <div id="extra_${sid(name)}"></div>
+            <button class="add-adj" onclick="addExtra('${name}')">＋ 新增額外項目</button>
+          </div>
+        </div>
       </div>`;
     area.appendChild(div);renderAdjRows(name);
   });
@@ -576,6 +600,17 @@ function refreshTotals(name){
   const d=driverData[name];if(!d)return;
   d.sources.forEach(src=>{const el=document.getElementById(`sub_${sid(name)}_${sid(src.label)}`);if(el)el.textContent='$'+srcSub(src,d.fe).toLocaleString();});
   const el=document.getElementById(`gt_${sid(name)}`);if(el)el.textContent='$'+dgt(d).toLocaleString();
+  const calcEl=document.getElementById(`calc_${sid(name)}`);
+  const {calcPay,actualPay}=calcActualPay(d);
+  if(calcEl)calcEl.textContent='$'+calcPay.toLocaleString();
+  // 更新額外項目的抽成後金額顯示
+  (d.extraItems||[]).forEach((item,i)=>{
+    const netEl=document.getElementById(`extra_net_${sid(name)}_${i}`);
+    if(netEl){
+      const net=calcExtraNet(d,item);
+      netEl.textContent=`→ 計入 $${net.toLocaleString()}`;
+    }
+  });
 }
 function selectAll(include){
   Object.keys(driverData).forEach(name=>{driverData[name].excluded=!include;});
@@ -605,6 +640,45 @@ function renderAdjRows(name){
       <button onclick="removeAdj('${name}',${i})">✕</button>
     </div>`).join('');
 }
+function addExtra(name){
+  if(!driverData[name].extraItems)driverData[name].extraItems=[];
+  driverData[name].extraItems.push({desc:'',amount:0,rate:90,customNet:null});
+  renderExtraRows(name);
+}
+function removeExtra(name,i){driverData[name].extraItems.splice(i,1);renderExtraRows(name);refreshTotals(name);}
+function renderExtraRows(name){
+  const d=driverData[name];
+  const el=document.getElementById(`extra_${sid(name)}`);if(!el)return;
+  el.innerHTML=(d.extraItems||[]).map((item,i)=>`
+    <div class="adj-row" style="flex-wrap:wrap;gap:5px;margin-bottom:6px;align-items:center">
+      <input type="text" placeholder="說明" value="${item.desc}" style="width:140px"
+        onchange="driverData['${name}'].extraItems[${i}].desc=this.value">
+      <input type="number" placeholder="原始金額" value="${item.amount||''}" style="width:80px"
+        onchange="driverData['${name}'].extraItems[${i}].amount=parseFloat(this.value)||0;refreshTotals('${name}')">
+      <div style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)">
+        抽成
+        <input type="number" min="0" max="100" value="${item.rate!=null?item.rate:90}"
+          style="width:50px;border:1px solid var(--rule);border-radius:3px;padding:2px 5px;font-size:11px;font-family:'IBM Plex Mono',monospace;background:var(--paper);outline:none;text-align:center"
+          onchange="driverData['${name}'].extraItems[${i}].rate=parseFloat(this.value);driverData['${name}'].extraItems[${i}].customNet=null;refreshTotals('${name}')">
+        %
+      </div>
+      <span style="font-size:10px;color:var(--green)" id="extra_net_${sid(name)}_${i}"></span>
+      <button onclick="removeExtra('${name}',${i})">✕</button>
+    </div>`).join('');
+  refreshTotals(name);
+}
+function calcExtraNet(d,item){
+  const rate=(item.rate!=null?item.rate:90)/100;
+  return Math.round((item.amount||0)*rate);
+}
+function calcActualPay(d){
+  const base=dgt(d);
+  const adjPlus=d.adjs.filter(a=>a.type==='plus').reduce((s,a)=>s+(a.amount||0),0);
+  const adjMinus=d.adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+(a.amount||0),0);
+  const extraNet=(d.extraItems||[]).reduce((s,item)=>s+calcExtraNet(d,item),0);
+  const calcPay=base+adjPlus-adjMinus+extraNet;
+  return{calcPay,actualPay:d.actualPay!=null?d.actualPay:calcPay};
+}
 
 // CALC
 function calcAndRender(){
@@ -622,8 +696,12 @@ function calcAndRender(){
       const baseNet=sources.reduce((s,src)=>s+src.netFromSrc,0);
       const plusAdj=d.adjs.filter(a=>a.type==='plus').reduce((s,a)=>s+(a.amount||0),0);
       const minusAdj=d.adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+(a.amount||0),0);
-      return{name,tripsTotal,baseNet,plusAdj,minusAdj,
-             netTotal:baseNet+plusAdj-minusAdj,sources,adjs:d.adjs,fe:d.fe,srcRates:d.srcRates};
+      const extraItems=(d.extraItems||[]).map(item=>({...item,netAmount:calcExtraNet(d,item)}));
+      const extraNet=extraItems.reduce((s,item)=>s+item.netAmount,0);
+      const calcPay=baseNet+plusAdj-minusAdj+extraNet;
+      const actualPay=d.actualPay!=null?d.actualPay:calcPay;
+      return{name,tripsTotal,baseNet,plusAdj,minusAdj,extraItems,extraNet,
+             netTotal:calcPay,actualPay,sources,adjs:d.adjs,fe:d.fe,srcRates:d.srcRates};
   });
   renderResults();goStep(3);
 }
@@ -662,8 +740,9 @@ function renderResults(){
         <button class="toggle-btn" style="margin-top:8px" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=(this.nextElementSibling.classList.contains('open')?'▼':'▶')+' 趟次明細（${r.sources.reduce((s,src)=>s+src.count,0)} 趟）'">▶ 趟次明細（${r.sources.reduce((s,src)=>s+src.count,0)} 趟）</button>
         <div class="detail-wrap"><table class="dtt"><thead><tr><th>#</th><th>訂單編號</th><th>時間</th><th>乘客 ｜ 類型</th><th style="text-align:right">金額</th></tr></thead><tbody>${detailRows}</tbody></table></div>
       </div>
-      <div class="pc-total"><div><div class="pc-total-label">本月應領薪資</div><div style="font-size:9px;color:#666;margin-top:1px">${rateDesc}${r.plusAdj>0?' + 加項':''}${r.minusAdj>0?' − 減項':''}</div></div>
+      <div class="pc-total"><div><div class="pc-total-label">本月應領薪資</div><div style="font-size:9px;color:#666;margin-top:1px">${rateDesc}${r.plusAdj>0?' + 加項':''}${r.minusAdj>0?' − 減項':''}${r.extraNet>0?' + 額外項目':''}</div></div>
       <div class="pc-amount">$${r.netTotal.toLocaleString()}</div></div>
+      ${r.actualPay!==r.netTotal?`<div style="background:#1a5276;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;color:#aaa">實領薪資（已手動調整）</div></div><div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#58d68d">$${r.actualPay.toLocaleString()}</div></div>`:''}
       <div class="pc-actions">
         <button class="btn btn-orange btn-sm" onclick="dlExcel(${idx})">📊 下載 Excel</button>
         <button class="btn btn-blue btn-sm" onclick="dlPDF(${idx})">📄 下載 PDF</button>
@@ -764,6 +843,11 @@ function buildPDFHTML(r,ml){
         +'<td style="padding:10px 12px;font-size:13px;font-weight:bold">本月應領薪資</td>'
         +'<td style="padding:10px 12px;font-size:20px;font-weight:bold;color:#f1c40f;text-align:right">$'+r.netTotal.toLocaleString()+'</td>'
       +'</tr></table>'
+      +(r.actualPay!=null&&r.actualPay!==r.netTotal?
+        '<table style="width:100%;border-collapse:collapse;background:#1a5276;color:#fff"><tr>'
+          +'<td style="padding:10px 12px;font-size:13px;font-weight:bold">本月實領薪資</td>'
+          +'<td style="padding:10px 12px;font-size:20px;font-weight:bold;color:#58d68d;text-align:right">$'+r.actualPay.toLocaleString()+'</td>'
+        +'</tr></table>':'')
     +'</div>'
     +'<div style="margin:0 36px 24px">'
       +'<div style="font-size:11px;font-weight:bold;color:#888;padding-bottom:6px;border-bottom:2px solid #111;margin-bottom:14px">趟次明細</div>'
@@ -911,8 +995,16 @@ function buildExcelWb(r,ml){
   });
   calcRows.push(['各來源司機抽成合計',r.baseNet,'']);
   if(r.adjs.length){calcRows.push(['']);r.adjs.forEach(a=>calcRows.push([a.desc||'調整項',a.type==='plus'?a.amount:-a.amount,a.type==='plus'?'加項':'減項']));}
+  if(r.extraItems&&r.extraItems.length){
+    calcRows.push(['']);
+    calcRows.push(['── 額外明細 ──','','']);
+    r.extraItems.forEach(item=>{
+      const net=calcExtraNet({srcRates:r.srcRates},item);
+      calcRows.push([item.desc||'額外項目',net,`原始$${item.amount} × ${item.rate!=null?item.rate:90}%`]);
+    });
+  }
   calcRows.push([''],['本月應領薪資',r.netTotal,'']);
-  if(disabledFees.length)calcRows.push(['','','⚠️ 未計入：'+disabledFees.join('、')]);
+  calcRows.push(['本月實領薪資',r.actualPay,'']);
   const ws2=XLSX.utils.aoa_to_sheet(calcRows);
   ws2['!cols']=[{wch:18},{wch:14},{wch:28}];
   XLSX.utils.book_append_sheet(wb,ws2,'薪資計算');
@@ -971,7 +1063,7 @@ function readExcelData(file){
           }
         }
         if(!ml)ml=String(rows2[1]?.[1]||'').trim();
-        let netTotal=0,baseNet=0;
+        let netTotal=0,baseNet=0,actualPay=null;
         const adjs=[];
         const srcRates={};
 
@@ -983,6 +1075,7 @@ function readExcelData(file){
           if(rateMatch){srcRates[rateMatch[1]]=parseFloat(rateMatch[2])||90;}
           if(label==='各來源司機抽成合計'&&!isNaN(val))baseNet=val;
           if(label==='本月應領薪資'&&!isNaN(val))netTotal=val;
+          if(label==='本月實領薪資'&&!isNaN(val))actualPay=val;
           // 加減項
           if(label&&!['項目','各來源司機抽成合計','本月應領薪資','司機姓名','結算月份',''].includes(label)
             &&!rateMatch&&!label.includes('趟次合計')&&!isNaN(val)&&val!==0)
@@ -1020,10 +1113,12 @@ function readExcelData(file){
           netFromSrc:Math.round(src.subtotal*(src.rate/100))
         }));
         const tripsTotal=sources.reduce((s,src)=>s+src.subtotal,0);
+        baseNet=sources.reduce((s,src)=>s+src.netFromSrc,0);
         const plusAdj=adjs.filter(a=>a.type==='plus').reduce((s,a)=>s+a.amount,0);
         const minusAdj=adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+a.amount,0);
+        netTotal=baseNet+plusAdj-minusAdj;
 
-        res({name,ml,tripsTotal,baseNet,netTotal,plusAdj,minusAdj,
+        res({name,ml,tripsTotal,baseNet,netTotal,actualPay,plusAdj,minusAdj,
              sources,adjs,fe:{},srcRates});
       }catch(err){rej(err)}
     };
