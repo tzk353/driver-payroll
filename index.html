@@ -965,6 +965,30 @@ function buildPDFHTML(r,ml){
     +'<div style="margin:0 36px 24px">'
       +'<div style="font-size:11px;font-weight:bold;color:#888;padding-bottom:6px;border-bottom:2px solid #111;margin-bottom:14px">趟次明細</div>'
       +tripSections
+      +(r.extraItems&&r.extraItems.length?
+        '<div style="margin-bottom:16px">'
+          +'<div style="background:#1a5276;color:#fff;padding:6px 10px;font-size:11px;font-weight:bold">額外明細項目</div>'
+          +'<div style="border:1px solid #ddd;border-top:none">'
+            +'<div style="background:#f0ede8;padding:4px 0;border-bottom:1px solid #ddd">'
+              +'<table style="width:722px;border-collapse:collapse;table-layout:fixed"><tr>'
+                +'<td style="width:350px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">說明</td>'
+                +'<td style="width:180px;padding:0 8px;font-size:9px;color:#888;font-weight:bold">原始金額 × 抽成%</td>'
+                +'<td style="width:90px;padding:0 8px;font-size:9px;color:#888;font-weight:bold;text-align:right">計入金額</td>'
+              +'</tr></table>'
+            +'</div>'
+            +r.extraItems.map((item,i)=>{
+              const bg=i%2===0?'#ffffff':'#f7f6f4';
+              return '<div style="background:'+bg+';border-bottom:1px solid #eee;padding:5px 0">'
+                +'<table style="width:722px;border-collapse:collapse;table-layout:fixed"><tr>'
+                +'<td style="width:350px;padding:2px 8px;font-size:11px">'+cut(item.desc||'額外項目',30)+'</td>'
+                +'<td style="width:180px;padding:2px 8px;font-size:10px;color:#666">$'+(item.amount||0).toLocaleString()+' × '+(item.rate!=null?item.rate:90)+'%</td>'
+                +'<td style="width:90px;padding:2px 8px;text-align:right;font-size:13px;color:#1e8449;font-weight:bold">$'+item.netAmount.toLocaleString()+'</td>'
+                +'</tr></table>'
+              +'</div>';
+            }).join('')
+          +'</div>'
+        +'</div>'
+      :'')
     +'</div>'
     +'<div style="margin:0 36px 28px;padding-top:8px;border-top:1px solid #ddd;font-size:9px;color:#ccc;text-align:center">此薪資單由系統自動產生　｜　列印日期：'+new Date().toLocaleDateString('zh-TW')+'</div>'
   +'</div>';
