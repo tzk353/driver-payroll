@@ -962,7 +962,7 @@ function buildPDFHTML(r,ml){
       +'<div style="padding:4px 12px 8px">'
         +(r.isMonthlySalary?
           r.sources.map(src=>'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:5px 0;font-size:12px;color:#aaa;border-bottom:1px solid #f0ede8">'+src.label+'（'+src.count+'趟）× '+src.rate+'%</td><td style="padding:5px 0;font-size:12px;text-align:right;color:#aaa;border-bottom:1px solid #f0ede8">$'+src.netFromSrc.toLocaleString()+'</td></tr></table>').join('')
-          +'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:5px 0;font-size:12px;color:#aaa;border-bottom:1px solid #ddd">業績合計（參考）</td><td style="padding:5px 0;font-size:12px;text-align:right;color:#aaa;border-bottom:1px solid #ddd">$'+r.calcNet.toLocaleString()+'</td></tr></table>'
+          +'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:5px 0;font-size:12px;color:#aaa;border-bottom:1px solid #ddd">業績合計（抽成後，參考）</td><td style="padding:5px 0;font-size:12px;text-align:right;color:#aaa;border-bottom:1px solid #ddd">$'+r.calcNet.toLocaleString()+'</td></tr></table>'
           +'<table style="width:100%;border-collapse:collapse"><tr><td style="padding:6px 0;font-size:13px;color:#b7860b;font-weight:bold;border-bottom:1px solid #f0ede8">月薪（固定）</td><td style="padding:6px 0;font-size:13px;text-align:right;color:#b7860b;font-weight:bold;border-bottom:1px solid #f0ede8">$'+r.monthlySalary.toLocaleString()+'</td></tr></table>'
           +adjRows
           :
@@ -976,7 +976,7 @@ function buildPDFHTML(r,ml){
         +'<td style="padding:10px 12px;font-size:13px;font-weight:bold">本月應領薪資</td>'
         +'<td style="padding:10px 12px;font-size:20px;font-weight:bold;color:#f1c40f;text-align:right">$'+r.netTotal.toLocaleString()+'</td>'
       +'</tr></table>'
-      +(r.actualPay!=null&&r.actualPay!==r.netTotal?
+      +(r.actualPay!=null?
         '<table style="width:100%;border-collapse:collapse;background:#1a5276;color:#fff"><tr>'
           +'<td style="padding:10px 12px;font-size:13px;font-weight:bold">本月實領薪資</td>'
           +'<td style="padding:10px 12px;font-size:20px;font-weight:bold;color:#58d68d;text-align:right">$'+r.actualPay.toLocaleString()+'</td>'
@@ -1148,6 +1148,10 @@ function buildExcelWb(r,ml){
   const calcRows=[['司機姓名',r.name],['結算月份',ml],[''],['項目','金額','說明']];
   if(r.isMonthlySalary){
     calcRows.push(['月薪（固定）',r.monthlySalary,'月薪模式']);
+    // 月薪模式也要記錄各來源抽成比例，供讀回時用
+    r.sources.forEach(src=>{
+      calcRows.push([`${src.label}司機抽成（${src.rate}%）`,src.netFromSrc,`業績參考：$${src.subtotal.toLocaleString()} × ${src.rate}%`]);
+    });
   } else {
     r.sources.forEach(src=>{
       calcRows.push([`${src.label}趟次合計`,src.subtotal,`${src.count}趟`]);
@@ -1227,17 +1231,21 @@ function readExcelData(file){
         let netTotal=0,baseNet=0,actualPay=null;
         const adjs=[];
         const srcRates={};
+        const extraItems=[];  // 從 Excel 讀回新增趟次
 
         rows2.forEach(row=>{
           const label=String(row[0]||'').trim();
           const val=parseFloat(row[1]);
-          // 各來源司機抽成：格式「格上司機抽成（90%）」
           const rateMatch=label.match(/^(.+?)司機抽成（(\d+)%）$/);
           if(rateMatch){srcRates[rateMatch[1]]=parseFloat(rateMatch[2])||90;}
           if(label==='各來源司機抽成合計'&&!isNaN(val))baseNet=val;
-          if(label==='本月應領薪資'&&!isNaN(val))netTotal=val;
           if(label==='本月實領薪資'&&!isNaN(val))actualPay=val;
-          // 加減項：排除所有系統標題列
+          // 新增趟次（★開頭）：讀回 netAmount 加入計算
+          if(label.startsWith('★')&&!isNaN(val)&&val!==0){
+            const desc=label.slice(1).trim();
+            extraItems.push({desc,netAmount:val,amount:val,rate:100});
+          }
+          // 加減項
           const EXCLUDE_LABELS=['項目','各來源司機抽成合計','本月應領薪資','本月實領薪資',
             '司機姓名','結算月份','月薪（固定）','── 額外明細 ──',''];
           if(label&&!EXCLUDE_LABELS.includes(label)
@@ -1285,22 +1293,26 @@ function readExcelData(file){
         baseNet=sources.reduce((s,src)=>s+src.netFromSrc,0);
         const plusAdj=adjs.filter(a=>a.type==='plus').reduce((s,a)=>s+a.amount,0);
         const minusAdj=adjs.filter(a=>a.type==='minus').reduce((s,a)=>s+a.amount,0);
+        const extraNet=extraItems.reduce((s,item)=>s+item.netAmount,0);
 
-        // 判斷是否月薪模式（Excel 有「月薪（固定）」這行）
+        // 月薪模式
         const monthlySalaryRow=rows2.find(r=>String(r[0]||'').trim()==='月薪（固定）');
         const isMonthlySalary=!!monthlySalaryRow;
         const monthlySalary=isMonthlySalary?parseFloat(monthlySalaryRow[1])||0:null;
 
-        // 重新計算應領（不讀 Excel 的應領值，自己算才準確）
-        if(isMonthlySalary){
-          netTotal=monthlySalary+plusAdj-minusAdj;
-        } else {
-          netTotal=baseNet+plusAdj-minusAdj;
-        }
+        // 重新計算應領
+        netTotal=isMonthlySalary
+          ? monthlySalary+plusAdj-minusAdj
+          : baseNet+plusAdj-minusAdj+extraNet;
+
+        // srcRates 補全
+        sources.forEach(src=>{if(!srcRates[src.label])srcRates[src.label]=src.rate;});
 
         res({name,ml,tripsTotal,baseNet,netTotal,actualPay,plusAdj,minusAdj,
              isMonthlySalary,monthlySalary,
-             calcNet:baseNet,sources,adjs,fe:{},srcRates});
+             extraItems,extraNet,
+             calcNet:baseNet+extraNet,
+             sources,adjs,fe:{},srcRates});
       }catch(err){rej(err)}
     };
     reader.onerror=()=>rej(new Error('讀取失敗'));
