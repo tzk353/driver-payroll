@@ -1242,10 +1242,16 @@ function readExcelData(file){
           if(rateMatch){srcRates[rateMatch[1]]=parseFloat(rateMatch[2])||90;}
           if(label==='各來源司機抽成合計'&&!isNaN(val))baseNet=val;
           if(label==='本月實領薪資'&&!isNaN(val))actualPay=val;
-          // 新增趟次（★開頭）：讀回 netAmount 加入計算
+          // 新增趟次（★開頭）：從說明欄讀原始金額和抽成比例
           if(label.startsWith('★')&&!isNaN(val)&&val!==0){
             const desc=label.slice(1).trim();
-            extraItems.push({desc,netAmount:val,amount:val,rate:100});
+            const noteStr=String(row[2]||'');
+            // 說明格式：「原始$700 × 35%」
+            const rateM=noteStr.match(/×\s*(\d+)%/);
+            const amtM=noteStr.match(/原始\$?([\d,]+)/);
+            const rate=rateM?parseFloat(rateM[1]):100;
+            const amount=amtM?parseFloat(amtM[1].replace(',','')):val;
+            extraItems.push({desc,netAmount:val,amount,rate});
           }
           // 加減項
           const EXCLUDE_LABELS=['項目','各來源司機抽成合計','本月應領薪資','本月實領薪資',
